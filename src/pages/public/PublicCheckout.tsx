@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -51,12 +51,34 @@ export default function PublicCheckout() {
   const { items, subtotalCents, notes, setNotes, clear } = useCart();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
-  const whatsappLinkRef = useRef<HTMLAnchorElement>(null);
 
   const form = useForm<CheckoutValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: { name: "", phone: "", address: "", notes: notes ?? "" },
   });
+
+  // Watch form fields reactively so the WhatsApp href is ALWAYS up-to-date.
+  // This avoids any async work inside the click handler, which would break
+  // user activation and trigger popup blockers.
+  const watched = form.watch();
+  const whatsappHref = useMemo(() => {
+    if (!settings?.whatsapp || !store) return "#";
+    const lines: string[] = [];
+    lines.push(`*Novo pedido — ${settings?.display_name ?? store.name}*`, "");
+    lines.push("*Itens:*");
+    for (const it of items) {
+      lines.push(`• ${it.quantity}× ${it.name} — ${formatBRL(it.unit_price_cents * it.quantity)}`);
+    }
+    lines.push("", `*Total:* ${formatBRL(subtotalCents)}`, "");
+    lines.push(`*Cliente:* ${watched.name ?? ""}`);
+    lines.push(`*Telefone:* ${watched.phone ?? ""}`);
+    lines.push(`*Endereço:* ${watched.address ?? ""}`);
+    if (watched.deliveryDate) {
+      lines.push(`*Entrega:* ${format(watched.deliveryDate, "dd/MM/yyyy", { locale: ptBR })}`);
+    }
+    if (watched.notes) lines.push("", `*Observações:* ${watched.notes}`);
+    return buildWhatsAppUrl(settings.whatsapp, lines.join("\n"));
+  }, [settings?.whatsapp, settings?.display_name, store, items, subtotalCents, watched.name, watched.phone, watched.address, watched.deliveryDate, watched.notes]);
 
   if (!store) return null;
 
@@ -124,23 +146,26 @@ export default function PublicCheckout() {
     }
   };
 
-  const handleWhatsApp = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+
+  const handleWhatsApp = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!settings?.whatsapp) {
       e.preventDefault();
       toast.error("WhatsApp da loja não configurado");
       return;
     }
-    const valid = await form.trigger();
-    if (!valid) {
+    // Synchronous validation only — no await, no form.trigger() — preserves user activation
+    const v = form.getValues();
+    const missing =
+      !v.name?.trim() ||
+      !v.phone?.trim() ||
+      !v.address?.trim() ||
+      v.name.trim().length < 2 ||
+      v.phone.trim().length < 8 ||
+      v.address.trim().length < 4;
+    if (missing) {
       e.preventDefault();
+      form.trigger(); // surface field errors in the UI (fire-and-forget)
       toast.error("Preencha os dados antes de enviar pelo WhatsApp");
-      return;
-    }
-    const values = form.getValues();
-    const url = buildWhatsAppUrl(settings.whatsapp, buildWhatsAppMessage(values));
-    // Update href right before navigation so the browser treats this as a direct user-initiated link click (no popup block)
-    if (whatsappLinkRef.current) {
-      whatsappLinkRef.current.href = url;
     }
   };
 
@@ -282,8 +307,7 @@ export default function PublicCheckout() {
               </Button>
               {settings?.whatsapp && (
                 <a
-                  ref={whatsappLinkRef}
-                  href={buildWhatsAppUrl(settings.whatsapp)}
+                  href={whatsappHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={handleWhatsApp}
