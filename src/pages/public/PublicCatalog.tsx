@@ -22,14 +22,16 @@ export default function PublicCatalog({ byCategory = false }: Props) {
   const activeCategory = byCategory && params.catSlug
     ? byStore.category(store.id, params.catSlug)
     : null;
+  const storeId = store.id;
+  const activeCategoryId = activeCategory?.id ?? null;
 
   const products = useMemo(() => {
-    let list = byStore.products(store.id).filter((p) => p.active);
-    if (activeCategory) list = list.filter((p) => p.category_id === activeCategory.id);
+    let list = byStore.products(storeId).filter((p) => p.active);
+    if (activeCategoryId) list = list.filter((p) => p.category_id === activeCategoryId);
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((p) => p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q));
     return list;
-  }, [store.id, activeCategory, query]);
+  }, [storeId, activeCategoryId, query]);
 
   return (
     <div className="container py-10 md:py-14 space-y-8">
