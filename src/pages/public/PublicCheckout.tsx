@@ -153,7 +153,7 @@ export default function PublicCheckout() {
       toast.error("WhatsApp da loja não configurado");
       return;
     }
-    // Synchronous validation only — no await, no form.trigger() — preserves user activation
+    // Synchronous validation only — preserves user activation
     const v = form.getValues();
     const missing =
       !v.name?.trim() ||
@@ -164,8 +164,25 @@ export default function PublicCheckout() {
       v.address.trim().length < 4;
     if (missing) {
       e.preventDefault();
-      form.trigger(); // surface field errors in the UI (fire-and-forget)
+      form.trigger();
       toast.error("Preencha os dados antes de enviar pelo WhatsApp");
+      return;
+    }
+    // Fallback synchronous open — if the <a target="_blank"> is blocked by the
+    // sandboxed iframe, this still navigates the top window to the URL.
+    // We DON'T preventDefault here — the native link behavior is the primary path.
+    try {
+      // If we are inside a sandboxed iframe (e.g. Lovable preview) without
+      // allow-popups, target=_blank is silently blocked. Detect and fallback.
+      const inIframe = window.self !== window.top;
+      if (inIframe) {
+        e.preventDefault();
+        window.open(whatsappHref, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      // cross-origin access throws — assume iframe and fallback
+      e.preventDefault();
+      window.open(whatsappHref, "_blank", "noopener,noreferrer");
     }
   };
 
