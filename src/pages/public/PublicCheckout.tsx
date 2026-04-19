@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -51,6 +51,7 @@ export default function PublicCheckout() {
   const { items, subtotalCents, notes, setNotes, clear } = useCart();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const whatsappLinkRef = useRef<HTMLAnchorElement>(null);
 
   const form = useForm<CheckoutValues>({
     resolver: zodResolver(checkoutSchema),
@@ -123,19 +124,24 @@ export default function PublicCheckout() {
     }
   };
 
-  const handleWhatsApp = async () => {
-    const valid = await form.trigger();
-    if (!valid) {
-      toast.error("Preencha os dados antes de enviar pelo WhatsApp");
+  const handleWhatsApp = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!settings?.whatsapp) {
+      e.preventDefault();
+      toast.error("WhatsApp da loja não configurado");
       return;
     }
-    if (!settings?.whatsapp) {
-      toast.error("WhatsApp da loja não configurado");
+    const valid = await form.trigger();
+    if (!valid) {
+      e.preventDefault();
+      toast.error("Preencha os dados antes de enviar pelo WhatsApp");
       return;
     }
     const values = form.getValues();
     const url = buildWhatsAppUrl(settings.whatsapp, buildWhatsAppMessage(values));
-    window.open(url, "_blank", "noopener,noreferrer");
+    // Update href right before navigation so the browser treats this as a direct user-initiated link click (no popup block)
+    if (whatsappLinkRef.current) {
+      whatsappLinkRef.current.href = url;
+    }
   };
 
   return (
@@ -275,15 +281,16 @@ export default function PublicCheckout() {
                 {submitting ? "Enviando..." : "Finalizar pedido"}
               </Button>
               {settings?.whatsapp && (
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="outline"
+                <a
+                  ref={whatsappLinkRef}
+                  href={buildWhatsAppUrl(settings.whatsapp)}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={handleWhatsApp}
-                  className="flex-1 border-[hsl(142_70%_45%)] text-[hsl(142_70%_35%)] hover:bg-[hsl(142_70%_45%)] hover:text-white"
+                  className="inline-flex items-center justify-center gap-2 flex-1 h-11 px-8 rounded-md text-sm font-medium border border-[hsl(142_70%_45%)] text-[hsl(142_70%_35%)] hover:bg-[hsl(142_70%_45%)] hover:text-white transition-colors"
                 >
                   Enviar pelo WhatsApp
-                </Button>
+                </a>
               )}
             </div>
           </form>
