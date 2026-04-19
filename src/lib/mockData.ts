@@ -25,11 +25,11 @@ export const categories: Category[] = [
 ];
 
 export const products: Product[] = [
-  { id: "p1", store_id: "st_1", category_id: "c1", name: "Buquê de Rosas Vermelhas", description: "12 rosas premium", price_cents: 18900, active: true, stock: 14, created_at: "" },
-  { id: "p2", store_id: "st_1", category_id: "c1", name: "Buquê Campestre", description: "Mix de flores do campo", price_cents: 14500, active: true, stock: 8, created_at: "" },
-  { id: "p3", store_id: "st_1", category_id: "c2", name: "Arranjo Tropical", description: "Helicônias e folhagens", price_cents: 22900, active: true, stock: 5, created_at: "" },
-  { id: "p4", store_id: "st_1", category_id: "c3", name: "Costela-de-Adão", description: "Vaso 25cm", price_cents: 16900, active: true, stock: 11, created_at: "" },
-  { id: "p5", store_id: "st_2", category_id: "c4", name: "Buquê Girassol", description: "5 girassóis", price_cents: 12900, active: true, stock: 20, created_at: "" },
+  { id: "p1", store_id: "st_1", category_id: "c1", name: "Buquê de Rosas Vermelhas", description: "12 rosas premium colhidas no dia, embaladas com papel artesanal e fita de cetim.", price_cents: 18900, active: true, stock: 14, created_at: "" },
+  { id: "p2", store_id: "st_1", category_id: "c1", name: "Buquê Campestre", description: "Mix delicado de flores do campo em tons pastéis.", price_cents: 14500, active: true, stock: 8, created_at: "" },
+  { id: "p3", store_id: "st_1", category_id: "c2", name: "Arranjo Tropical", description: "Helicônias, antúrios e folhagens em vaso de cerâmica.", price_cents: 22900, active: true, stock: 5, created_at: "" },
+  { id: "p4", store_id: "st_1", category_id: "c3", name: "Costela-de-Adão", description: "Planta tropical em vaso de 25cm, ideal para ambientes internos.", price_cents: 16900, active: true, stock: 11, created_at: "" },
+  { id: "p5", store_id: "st_2", category_id: "c4", name: "Buquê Girassol", description: "5 girassóis frescos com folhagens.", price_cents: 12900, active: true, stock: 20, created_at: "" },
 ];
 
 export const customers: Customer[] = [
@@ -72,11 +72,83 @@ export const byStore = {
   settings: (store_id: string) => storeSettings.find((s) => s.store_id === store_id) ?? null,
   categories: (store_id: string) => categories.filter((c) => c.store_id === store_id),
   products: (store_id: string) => products.filter((p) => p.store_id === store_id),
+  product: (store_id: string, product_id: string) =>
+    products.find((p) => p.store_id === store_id && p.id === product_id) ?? null,
+  category: (store_id: string, slug: string) =>
+    categories.find((c) => c.store_id === store_id && c.slug === slug) ?? null,
   orders: (store_id: string) => orders.filter((o) => o.store_id === store_id),
+  order: (store_id: string, order_id: string) =>
+    orders.find((o) => o.store_id === store_id && o.id === order_id) ?? null,
+  orderItems: (store_id: string, order_id: string) =>
+    orderItems.filter((oi) => oi.store_id === store_id && oi.order_id === order_id),
   customers: (store_id: string) => customers.filter((c) => c.store_id === store_id),
+  customer: (store_id: string, customer_id: string) =>
+    customers.find((c) => c.store_id === store_id && c.id === customer_id) ?? null,
   shippingRules: (store_id: string) => shippingRules.filter((s) => s.store_id === store_id),
   deliveries: (store_id: string) => deliveries.filter((d) => d.store_id === store_id),
 };
 
 export const formatBRL = (cents: number) =>
   (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/* ---------- Order creation (mock) ---------- */
+
+export interface CreateOrderInput {
+  customer: { name: string; phone: string; email?: string };
+  address: string;
+  scheduled_for?: string | null;
+  notes?: string;
+  items: { product_id: string; quantity: number; unit_price_cents: number }[];
+}
+
+const genId = (prefix: string) =>
+  `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+export function createOrder(store_id: string, input: CreateOrderInput): Order {
+  const customer: Customer = {
+    id: genId("cu"),
+    store_id,
+    name: input.customer.name,
+    email: input.customer.email,
+    phone: input.customer.phone,
+    created_at: new Date().toISOString(),
+  };
+  customers.push(customer);
+
+  const total_cents = input.items.reduce((n, i) => n + i.quantity * i.unit_price_cents, 0);
+
+  const order: Order = {
+    id: genId("o"),
+    store_id,
+    customer_id: customer.id,
+    status: "pending",
+    total_cents,
+    created_at: new Date().toISOString(),
+  };
+  orders.push(order);
+
+  for (const it of input.items) {
+    orderItems.push({
+      id: genId("oi"),
+      store_id,
+      order_id: order.id,
+      product_id: it.product_id,
+      quantity: it.quantity,
+      unit_price_cents: it.unit_price_cents,
+    });
+  }
+
+  if (input.scheduled_for || input.address) {
+    deliveries.push({
+      id: genId("d"),
+      store_id,
+      order_id: order.id,
+      recipient_name: customer.name,
+      address: input.address,
+      scheduled_for: input.scheduled_for ?? new Date().toISOString(),
+      status: "scheduled",
+    });
+  }
+
+  return order;
+}

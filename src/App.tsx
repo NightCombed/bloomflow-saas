@@ -14,6 +14,11 @@ import NotFound from "./pages/NotFound";
 
 import PublicStoreLayout from "@/components/layouts/PublicStoreLayout";
 import PublicStoreHome from "@/pages/public/PublicStoreHome";
+import PublicCatalog from "@/pages/public/PublicCatalog";
+import PublicProductDetail from "@/pages/public/PublicProductDetail";
+import PublicCart from "@/pages/public/PublicCart";
+import PublicCheckout from "@/pages/public/PublicCheckout";
+import PublicOrderConfirmation from "@/pages/public/PublicOrderConfirmation";
 
 import AdminLayout from "@/components/layouts/AdminLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -46,6 +51,12 @@ const App = () => (
               }
             >
               <Route index element={<PublicStoreHome />} />
+              <Route path="produtos" element={<PublicCatalog />} />
+              <Route path="categoria/:catSlug" element={<PublicCatalog byCategory />} />
+              <Route path="produto/:productId" element={<PublicProductDetail />} />
+              <Route path="carrinho" element={<PublicCart />} />
+              <Route path="checkout" element={<PublicCheckout />} />
+              <Route path="pedido/:orderId" element={<PublicOrderConfirmation />} />
             </Route>
 
             {/* Store admin */}
