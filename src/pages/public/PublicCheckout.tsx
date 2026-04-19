@@ -275,26 +275,17 @@ export default function PublicCheckout() {
                 {submitting ? "Enviando..." : "Finalizar pedido"}
               </Button>
               {settings?.whatsapp && (
-                <WhatsAppButton
-                  phone={settings.whatsapp}
-                  variant="inline"
-                  label="Enviar pelo WhatsApp"
-                  className="flex-1 h-11"
-                  // override onClick by wrapping — use a button below instead
-                />
+                <Button
+                  type="button"
+                  size="lg"
+                  variant="outline"
+                  onClick={handleWhatsApp}
+                  className="flex-1 border-[hsl(142_70%_45%)] text-[hsl(142_70%_35%)] hover:bg-[hsl(142_70%_45%)] hover:text-white"
+                >
+                  Enviar pelo WhatsApp
+                </Button>
               )}
             </div>
-
-            {settings?.whatsapp && (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleWhatsApp}
-                className="text-sm text-muted-foreground hover:text-primary"
-              >
-                Prefere falar antes? Enviar resumo pelo WhatsApp →
-              </Button>
-            )}
           </form>
         </Form>
 
