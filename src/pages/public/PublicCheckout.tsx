@@ -20,7 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { OrderSummary } from "@/components/store/OrderSummary";
-import { WhatsAppButton, buildWhatsAppUrl } from "@/components/store/WhatsAppButton";
+import { buildWhatsAppUrl } from "@/components/store/WhatsAppButton";
 import { EmptyState } from "@/components/store/EmptyState";
 import { cn } from "@/lib/utils";
 
