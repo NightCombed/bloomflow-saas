@@ -17,21 +17,23 @@ export default function PublicCatalog({ byCategory = false }: Props) {
   const params = useParams<{ catSlug?: string }>();
   const [query, setQuery] = useState("");
 
-  if (!store) return null;
-  const categories = byStore.categories(store.id);
-  const activeCategory = byCategory && params.catSlug
-    ? byStore.category(store.id, params.catSlug)
+  const storeId = store?.id ?? null;
+  const categories = storeId ? byStore.categories(storeId) : [];
+  const activeCategory = byCategory && storeId && params.catSlug
+    ? byStore.category(storeId, params.catSlug)
     : null;
-  const storeId = store.id;
   const activeCategoryId = activeCategory?.id ?? null;
 
   const products = useMemo(() => {
+    if (!storeId) return [];
     let list = byStore.products(storeId).filter((p) => p.active);
     if (activeCategoryId) list = list.filter((p) => p.category_id === activeCategoryId);
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((p) => p.name.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q));
     return list;
   }, [storeId, activeCategoryId, query]);
+
+  if (!store) return null;
 
   return (
     <div className="container py-10 md:py-14 space-y-8">
