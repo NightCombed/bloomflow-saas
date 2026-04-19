@@ -57,6 +57,29 @@ export default function PublicCheckout() {
     defaultValues: { name: "", phone: "", address: "", notes: notes ?? "" },
   });
 
+  // Watch form fields reactively so the WhatsApp href is ALWAYS up-to-date.
+  // This avoids any async work inside the click handler, which would break
+  // user activation and trigger popup blockers.
+  const watched = form.watch();
+  const whatsappHref = useMemo(() => {
+    if (!settings?.whatsapp || !store) return "#";
+    const lines: string[] = [];
+    lines.push(`*Novo pedido — ${settings?.display_name ?? store.name}*`, "");
+    lines.push("*Itens:*");
+    for (const it of items) {
+      lines.push(`• ${it.quantity}× ${it.name} — ${formatBRL(it.unit_price_cents * it.quantity)}`);
+    }
+    lines.push("", `*Total:* ${formatBRL(subtotalCents)}`, "");
+    lines.push(`*Cliente:* ${watched.name ?? ""}`);
+    lines.push(`*Telefone:* ${watched.phone ?? ""}`);
+    lines.push(`*Endereço:* ${watched.address ?? ""}`);
+    if (watched.deliveryDate) {
+      lines.push(`*Entrega:* ${format(watched.deliveryDate, "dd/MM/yyyy", { locale: ptBR })}`);
+    }
+    if (watched.notes) lines.push("", `*Observações:* ${watched.notes}`);
+    return buildWhatsAppUrl(settings.whatsapp, lines.join("\n"));
+  }, [settings?.whatsapp, settings?.display_name, store, items, subtotalCents, watched.name, watched.phone, watched.address, watched.deliveryDate, watched.notes]);
+
   if (!store) return null;
 
   if (items.length === 0) {
@@ -123,22 +146,6 @@ export default function PublicCheckout() {
     }
   };
 
-  // Watch form fields reactively so the WhatsApp href is ALWAYS up-to-date.
-  // This avoids any async work inside the click handler, which would break
-  // user activation and trigger popup blockers.
-  const watched = form.watch();
-  const whatsappHref = useMemo(() => {
-    if (!settings?.whatsapp) return "#";
-    const message = buildWhatsAppMessage({
-      name: watched.name ?? "",
-      phone: watched.phone ?? "",
-      address: watched.address ?? "",
-      deliveryDate: watched.deliveryDate,
-      notes: watched.notes ?? "",
-    } as CheckoutValues);
-    return buildWhatsAppUrl(settings.whatsapp, message);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings?.whatsapp, watched.name, watched.phone, watched.address, watched.deliveryDate, watched.notes, items, subtotalCents]);
 
   const handleWhatsApp = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!settings?.whatsapp) {
