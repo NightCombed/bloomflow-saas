@@ -1,9 +1,19 @@
-import { Link, Outlet } from "react-router-dom";
+import { useState } from "react";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { Flower2, Menu } from "lucide-react";
 import { useTenant } from "@/contexts/TenantContext";
-import { Flower2 } from "lucide-react";
+import { CartProvider } from "@/contexts/CartContext";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
+import { CartIconButton } from "@/components/store/CartIconButton";
+import { CartDrawer } from "@/components/store/CartDrawer";
+import { WhatsAppButton } from "@/components/store/WhatsAppButton";
+import { cn } from "@/lib/utils";
 
-export default function PublicStoreLayout() {
+function PublicStoreShell() {
   const { store, settings } = useTenant();
+  const [cartOpen, setCartOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (!store) {
     return (
@@ -20,21 +30,82 @@ export default function PublicStoreLayout() {
     );
   }
 
+  const navItems = [
+    { to: `/loja/${store.slug}`, label: "Início", end: true },
+    { to: `/loja/${store.slug}/produtos`, label: "Produtos", end: false },
+  ];
+
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "transition-colors hover:text-primary",
+      isActive ? "text-primary font-medium" : "text-foreground"
+    );
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-soft">
       <header className="border-b border-border/60 bg-background/80 backdrop-blur sticky top-0 z-30">
-        <div className="container flex h-16 items-center justify-between">
-          <Link to={`/loja/${store.slug}`} className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground">
+        <div className="container flex h-16 items-center justify-between gap-3">
+          <Link to={`/loja/${store.slug}`} className="flex items-center gap-2 min-w-0">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground flex-shrink-0">
               <Flower2 className="h-4 w-4" />
             </span>
-            <span className="font-serif text-xl font-semibold">{settings?.display_name ?? store.name}</span>
+            <span className="font-serif text-xl font-semibold truncate">
+              {settings?.display_name ?? store.name}
+            </span>
           </Link>
+
           <nav className="hidden md:flex items-center gap-7 text-sm">
-            <Link to={`/loja/${store.slug}`} className="hover:text-primary transition-colors">Início</Link>
-            <a href="#produtos" className="hover:text-primary transition-colors">Produtos</a>
+            {navItems.map((it) => (
+              <NavLink key={it.to} to={it.to} end={it.end} className={navLinkClass}>
+                {it.label}
+              </NavLink>
+            ))}
             <a href="#contato" className="hover:text-primary transition-colors">Contato</a>
           </nav>
+
+          <div className="flex items-center gap-1">
+            <CartIconButton onClick={() => setCartOpen(true)} />
+
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Abrir menu">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72">
+                <SheetHeader>
+                  <SheetTitle className="font-serif text-2xl text-left">
+                    {settings?.display_name ?? store.name}
+                  </SheetTitle>
+                </SheetHeader>
+                <nav className="mt-6 flex flex-col gap-1">
+                  {navItems.map((it) => (
+                    <NavLink
+                      key={it.to}
+                      to={it.to}
+                      end={it.end}
+                      onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          "px-3 py-3 rounded-md text-base transition-colors",
+                          isActive ? "bg-primary text-primary-foreground" : "hover:bg-secondary"
+                        )
+                      }
+                    >
+                      {it.label}
+                    </NavLink>
+                  ))}
+                  <a
+                    href="#contato"
+                    onClick={() => setMenuOpen(false)}
+                    className="px-3 py-3 rounded-md text-base hover:bg-secondary"
+                  >
+                    Contato
+                  </a>
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
       </header>
 
@@ -48,14 +119,34 @@ export default function PublicStoreLayout() {
           </div>
           <div>
             <div className="font-medium mb-2">Contato</div>
-            <p className="text-muted-foreground">{settings?.whatsapp}</p>
-            <p className="text-muted-foreground">{settings?.address}</p>
+            {settings?.whatsapp && <p className="text-muted-foreground">{settings.whatsapp}</p>}
+            {settings?.address && <p className="text-muted-foreground">{settings.address}</p>}
+            {settings?.whatsapp && (
+              <div className="mt-3">
+                <WhatsAppButton phone={settings.whatsapp} message={`Olá, ${settings.display_name}!`} />
+              </div>
+            )}
           </div>
           <div className="md:text-right text-muted-foreground">
             Powered by <Link to="/" className="text-primary">FlorFlow</Link>
           </div>
         </div>
       </footer>
+
+      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
+      <WhatsAppButton
+        phone={settings?.whatsapp}
+        message={`Olá, ${settings?.display_name ?? store.name}! Gostaria de fazer um pedido.`}
+        variant="floating"
+      />
     </div>
+  );
+}
+
+export default function PublicStoreLayout() {
+  return (
+    <CartProvider>
+      <PublicStoreShell />
+    </CartProvider>
   );
 }
