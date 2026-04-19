@@ -1,76 +1,25 @@
 
 
-## Goal
-Build the complete public storefront for FlorFlow: catalog, product detail, cart, checkout with WhatsApp fallback. Mobile-first, tenant-scoped, mock data ready to swap for Supabase.
+## Problema
+O fix anterior ainda dispara o bloqueio porque o `href` é atualizado **dentro** do `onClick` após um `await form.trigger()`. O `await` quebra o "user activation" do clique — quando o navegador finalmente segue o link, já não considera mais como ação direta do usuário, e bloqueia.
 
-## Architecture
+Além disso, se o form for inválido chamamos `e.preventDefault()` — ok — mas no caminho válido o link navega com o `href` antigo (placeholder `https://wa.me/<numero>` sem mensagem), porque a mutação do `href` ocorre depois do await e o browser pode já ter capturado o href original.
 
-**Cart state** — `src/contexts/CartContext.tsx`
-- Items: `{ productId, name, unit_price_cents, quantity, image_url? }`
-- Actions: add / remove / updateQty / clear / setNotes (cart-level observations)
-- Persisted in `localStorage` with key `florflow:cart:<store.slug>` → strict tenant isolation
-- Provider mounted inside `PublicStoreLayout` (so it only exists once a store is resolved)
+## Correção
 
-**Mock orders** — extend `src/lib/mockData.ts` with `createOrder(storeId, payload)` returning a generated order id; pushes into in-memory `orders` + `orderItems` + `customers`.
+Trocar a estratégia: **manter o `href` sempre atualizado em tempo real** via `useMemo`/efeito reativo aos campos do form, em vez de atualizar no `onClick`.
 
-## Routes (added in `App.tsx` under `/loja/:slug`)
+Passos em `src/pages/public/PublicCheckout.tsx`:
 
-```text
-/loja/:slug                       Home (hero + destaques + categorias)
-/loja/:slug/produtos              Catálogo completo + filtro categoria + busca
-/loja/:slug/categoria/:catSlug    Catálogo filtrado por categoria
-/loja/:slug/produto/:productId    Detalhe do produto + qty + add to cart
-/loja/:slug/carrinho              Carrinho com edição + observações
-/loja/:slug/checkout              Form (nome, tel, endereço, data, obs) + resumo
-/loja/:slug/pedido/:orderId       Confirmação + CTA WhatsApp
-```
+1. Usar `form.watch()` para observar `name`, `phone`, `address`, `deliveryDate`, `notes` em tempo real.
+2. Computar `whatsappHref` com `useMemo` — sempre contém a URL `https://wa.me/<numero>?text=<mensagem-atual>` (mesmo que o form esteja parcialmente preenchido).
+3. Renderizar o `<a href={whatsappHref} target="_blank" rel="noopener noreferrer">` sem `onClick` assíncrono.
+4. Validação leve **síncrona** no `onClick`: se campos obrigatórios estiverem vazios, `e.preventDefault()` + toast. Sem `await`, sem `form.trigger()` — assim o user activation é preservado.
+5. Remover `whatsappLinkRef` (não é mais necessário).
+6. Se `settings?.whatsapp` não existir, não renderizar o link (já é o caso).
 
-## Components (`src/components/store/`)
-- `ProductCard` — card reutilizável (home + catálogo)
-- `CategoryPills` — chips de categorias clicáveis
-- `CartIconButton` — botão no header com badge de quantidade
-- `CartDrawer` — Sheet lateral com mini-carrinho e CTAs
-- `QuantityStepper` — controle −/+
-- `WhatsAppButton` — botão flutuante + variante inline (usa `settings.whatsapp`)
-- `OrderSummary` — resumo sticky no checkout
-- `EmptyState` — para carrinho vazio / sem produtos
+Resultado: o clique segue o link instantaneamente, sem await, sem mutação de href no meio do gesto → navegadores modernos (Chrome, Safari, Firefox, Safari iOS) não bloqueiam.
 
-## Header (`PublicStoreLayout`)
-- Adicionar link "Produtos" e ícone do carrinho com badge
-- Menu mobile (Sheet) com hamburger
-- Botão WhatsApp flutuante fixo (bottom-right) presente em todas as páginas públicas
-
-## Checkout
-Form com `react-hook-form` + `zod`:
-- Nome (obrigatório, 2-100 chars)
-- Telefone (obrigatório, regex BR)
-- Bairro / endereço simplificado (obrigatório)
-- Data de entrega (Shadcn DatePicker, opcional, ≥ hoje)
-- Observações livres (textarea, ≤ 500 chars) com chips de sugestões: "Entregar depois das 18h", "É presente", "Não tocar a campainha", "Deixar com a portaria" → clicar adiciona ao textarea
-- Resumo: itens + subtotal + total via `formatBRL`
-
-Dois CTAs:
-1. **Finalizar pedido** → `createOrder()`, limpa carrinho, navega para `/pedido/:id` com toast
-2. **Enviar pelo WhatsApp** → monta mensagem formatada (itens, total, dados, obs) e abre `https://wa.me/<numero>?text=<encoded>` em nova aba
-
-## Confirmação
-Mostra número do pedido, itens, total, dados de entrega, status "Pedido recebido", botão WhatsApp para acompanhar, link "Voltar à loja".
-
-## Design / UX
-- Mobile-first: grid 1 col → 2 → 3, sticky CTAs no mobile (carrinho/checkout)
-- Mantém paleta verde sálvia + terracota e tipografia *Fraunces* / *Inter* já configuradas
-- Cards com `shadow-soft → shadow-elegant` no hover, bordas suaves, gradient backgrounds existentes
-- Imagens: produtos sem `image_url` mostram fallback botânico estilizado (gradiente + ícone), preparado para receber URL real depois
-
-## Segurança / qualidade
-- Validação zod em todos os inputs (length limits + trim)
-- `encodeURIComponent` na URL do WhatsApp
-- Sem `dangerouslySetInnerHTML`
-- Cart isolado por `store.slug` no localStorage → zero vazamento entre lojas
-
-## Fora de escopo (próximas etapas)
-- Pagamento real (requer Lovable Cloud + Stripe)
-- Persistência de pedidos em DB
-- Login do cliente final / histórico de pedidos
-- Upload real de imagens de produto
+## Arquivo afetado
+- `src/pages/public/PublicCheckout.tsx` (apenas)
 
