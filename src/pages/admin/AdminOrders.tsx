@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useActiveStore } from "@/hooks/useActiveStore";
+import { useMockData } from "@/hooks/useMockData";
 import { byStore, formatBRL, ORDER_STATUS_LABEL } from "@/lib/mockData";
 import type { Order } from "@/types/database";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ const STATUS_BADGE: Record<Order["status"], string> = {
 
 export default function AdminOrders() {
   const store = useActiveStore();
+  const snapshot = useMockData();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [search, setSearch] = useState("");
 
@@ -39,6 +41,7 @@ export default function AdminOrders() {
     if (!store) return [];
     const orders = byStore.orders(store.id);
     const customers = byStore.customers(store.id);
+    console.log("[AdminOrders] carregando pedidos", { store_id: store.id, total: orders.length, snapshot: snapshot.version });
     return orders
       .map((o) => ({ order: o, customer: customers.find((c) => c.id === o.customer_id) ?? null }))
       .filter((r) => filter === "all" || r.order.status === filter)
@@ -52,7 +55,7 @@ export default function AdminOrders() {
         );
       })
       .sort((a, b) => +new Date(b.order.created_at) - +new Date(a.order.created_at));
-  }, [store, filter, search]);
+  }, [store, filter, search, snapshot.version]);
 
   if (!store) return null;
 
