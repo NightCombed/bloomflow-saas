@@ -37,16 +37,52 @@ export const customers: Customer[] = [
   { id: "cu2", store_id: "st_1", name: "Pedro Souza", email: "pedro@example.com", created_at: "" },
 ];
 
+const today = new Date();
+const iso = (daysAgo: number, h = 10, m = 0) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+};
+
 export const orders: Order[] = [
-  { id: "o1", store_id: "st_1", customer_id: "cu1", status: "preparing", total_cents: 18900, created_at: "2025-04-18T14:00:00Z" },
-  { id: "o2", store_id: "st_1", customer_id: "cu2", status: "delivered", total_cents: 33400, created_at: "2025-04-17T09:30:00Z" },
+  { id: "o1", store_id: "st_1", customer_id: "cu1", status: "preparing", total_cents: 18900, created_at: iso(0, 9, 15) },
+  { id: "o2", store_id: "st_1", customer_id: "cu2", status: "delivered", total_cents: 33400, created_at: iso(1, 14, 20) },
+  { id: "o3", store_id: "st_1", customer_id: "cu1", status: "pending", total_cents: 14500, created_at: iso(0, 11, 5) },
+  { id: "o4", store_id: "st_1", customer_id: "cu2", status: "out_for_delivery", total_cents: 22900, created_at: iso(0, 8, 0) },
+  { id: "o5", store_id: "st_1", customer_id: "cu1", status: "delivered", total_cents: 16900, created_at: iso(2, 16, 30) },
+  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "canceled", total_cents: 12900, created_at: iso(3, 10, 0) },
+  { id: "o7", store_id: "st_1", customer_id: "cu1", status: "delivered", total_cents: 37800, created_at: iso(5, 13, 0) },
 ];
 
 export const orderItems: OrderItem[] = [
   { id: "oi1", store_id: "st_1", order_id: "o1", product_id: "p1", quantity: 1, unit_price_cents: 18900 },
   { id: "oi2", store_id: "st_1", order_id: "o2", product_id: "p2", quantity: 1, unit_price_cents: 14500 },
   { id: "oi3", store_id: "st_1", order_id: "o2", product_id: "p4", quantity: 1, unit_price_cents: 16900 },
+  { id: "oi4", store_id: "st_1", order_id: "o3", product_id: "p2", quantity: 1, unit_price_cents: 14500 },
+  { id: "oi5", store_id: "st_1", order_id: "o4", product_id: "p3", quantity: 1, unit_price_cents: 22900 },
+  { id: "oi6", store_id: "st_1", order_id: "o5", product_id: "p4", quantity: 1, unit_price_cents: 16900 },
+  { id: "oi7", store_id: "st_1", order_id: "o6", product_id: "p5", quantity: 1, unit_price_cents: 12900 },
+  { id: "oi8", store_id: "st_1", order_id: "o7", product_id: "p1", quantity: 2, unit_price_cents: 18900 },
 ];
+
+/** Order notes — separate so OrderItem stays clean. */
+export const orderNotes: Record<string, string> = {
+  o1: "Cartão: Feliz aniversário, mãe! Entregar antes das 12h.",
+  o3: "Sem fita vermelha, por favor.",
+  o4: "Tocar interfone 42.",
+};
+
+/** Order delivery addresses (mock — would come from order.delivery_address in DB). */
+export const orderAddresses: Record<string, string> = {
+  o1: "Rua das Acácias, 120 — Apto 32 — Pinheiros, São Paulo",
+  o2: "Av. Paulista, 1000 — Bela Vista, São Paulo",
+  o3: "Rua Augusta, 500 — Consolação, São Paulo",
+  o4: "Rua Oscar Freire, 200 — Jardins, São Paulo",
+  o5: "Av. Faria Lima, 1500 — Itaim, São Paulo",
+  o6: "Rua Haddock Lobo, 300 — Cerqueira César, São Paulo",
+  o7: "Rua Teodoro Sampaio, 800 — Pinheiros, São Paulo",
+};
 
 export const shippingRules: ShippingRule[] = [
   { id: "sr1", store_id: "st_1", name: "Centro SP", region: "0101", price_cents: 1500, eta_hours: 3, active: true },
@@ -90,6 +126,64 @@ export const byStore = {
 
 export const formatBRL = (cents: number) =>
   (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/* ---------- Order mutations & metrics ---------- */
+
+export function updateOrderStatus(store_id: string, order_id: string, status: Order["status"]): Order | null {
+  const o = orders.find((x) => x.store_id === store_id && x.id === order_id);
+  if (!o) return null;
+  o.status = status;
+  return o;
+}
+
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+export const metrics = {
+  todayRevenueCents(store_id: string) {
+    const now = new Date();
+    return byStore.orders(store_id)
+      .filter((o) => o.status !== "canceled" && sameDay(new Date(o.created_at), now))
+      .reduce((s, o) => s + o.total_cents, 0);
+  },
+  countByStatus(store_id: string, status: Order["status"]) {
+    return byStore.orders(store_id).filter((o) => o.status === status).length;
+  },
+  ordersToday(store_id: string) {
+    const now = new Date();
+    return byStore.orders(store_id).filter((o) => sameDay(new Date(o.created_at), now));
+  },
+  topProducts(store_id: string, limit = 5) {
+    const items = orderItems.filter((oi) => oi.store_id === store_id);
+    const map = new Map<string, { product_id: string; quantity: number; revenue_cents: number }>();
+    for (const it of items) {
+      const cur = map.get(it.product_id) ?? { product_id: it.product_id, quantity: 0, revenue_cents: 0 };
+      cur.quantity += it.quantity;
+      cur.revenue_cents += it.quantity * it.unit_price_cents;
+      map.set(it.product_id, cur);
+    }
+    return Array.from(map.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, limit)
+      .map((row) => ({
+        ...row,
+        product: products.find((p) => p.id === row.product_id) ?? null,
+      }));
+  },
+};
+
+export const ORDER_STATUS_LABEL: Record<Order["status"], string> = {
+  pending: "Pendente",
+  confirmed: "Confirmado",
+  preparing: "Em preparação",
+  out_for_delivery: "Saiu para entrega",
+  delivered: "Entregue",
+  canceled: "Cancelado",
+};
+
+export const ORDER_STATUS_FLOW: Order["status"][] = [
+  "pending", "confirmed", "preparing", "out_for_delivery", "delivered",
+];
 
 /* ---------- Order creation (mock) ---------- */
 
