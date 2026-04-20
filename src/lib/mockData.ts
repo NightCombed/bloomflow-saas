@@ -232,6 +232,10 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
     });
   }
 
+  // Persist address & notes in the same maps the admin panel reads from.
+  if (input.address) orderAddresses[order.id] = input.address;
+  if (input.notes && input.notes.trim()) orderNotes[order.id] = input.notes.trim();
+
   if (input.scheduled_for || input.address) {
     deliveries.push({
       id: genId("d"),
