@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import { useActiveStore } from "@/hooks/useActiveStore";
+import { useMockData } from "@/hooks/useMockData";
 import { byStore, formatBRL, metrics, ORDER_STATUS_LABEL } from "@/lib/mockData";
 import { Clock, Package, ShoppingBag, Truck, CheckCircle2, TrendingUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AdminDashboard() {
   const store = useActiveStore();
+  const snapshot = useMockData();
   if (!store) {
     return (
       <div className="rounded-lg border border-border p-8 text-center">
@@ -25,6 +27,7 @@ export default function AdminDashboard() {
     .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
     .slice(0, 5);
   const customers = byStore.customers(store.id);
+  console.log("[AdminDashboard] snapshot", { v: snapshot.version, store_id: store.id, recent: recent.length, total: byStore.orders(store.id).length });
 
   const kpis = [
     { label: "Vendas hoje", value: formatBRL(todayRevenue), icon: TrendingUp, accent: "text-primary" },

@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useActiveStore } from "@/hooks/useActiveStore";
+import { useMockData } from "@/hooks/useMockData";
 import {
   byStore, formatBRL, ORDER_STATUS_LABEL, ORDER_STATUS_FLOW,
   orderNotes, orderAddresses, products, updateOrderStatus,
@@ -24,7 +24,7 @@ export default function AdminOrderDetail() {
   const store = useActiveStore();
   const { orderId = "" } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const [, force] = useState(0);
+  useMockData();
 
   if (!store) return null;
   const order = byStore.order(store.id, orderId);
@@ -49,7 +49,6 @@ export default function AdminOrderDetail() {
   const setStatus = (s: Order["status"]) => {
     updateOrderStatus(store.id, order.id, s);
     toast.success(`Status atualizado: ${ORDER_STATUS_LABEL[s]}`);
-    force((n) => n + 1);
   };
 
   const copy = (text: string, label: string) => {
