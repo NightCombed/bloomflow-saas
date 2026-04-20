@@ -7,6 +7,10 @@ import type {
   Order, OrderItem, ShippingRule, Delivery, PlatformUser, StoreMember,
 } from "@/types/database";
 
+const mockRuntime = globalThis as typeof globalThis & {
+  __florflowMockDataInitialized__?: boolean;
+};
+
 export const stores: Store[] = [
   { id: "st_1", slug: "rosa-bela", name: "Rosa Bela Floricultura", status: "active", created_at: "2025-01-12T10:00:00Z" },
   { id: "st_2", slug: "jardim-do-sol", name: "Jardim do Sol", status: "trial", created_at: "2025-03-04T10:00:00Z" },
@@ -102,6 +106,106 @@ export const storeMembers: StoreMember[] = [
   { id: "m1", store_id: "st_1", user_id: "u_owner1", role: "owner", created_at: "" },
 ];
 
+const MOCK_DATA_KEY = "florflow:mock-data:v1";
+const MOCK_DATA_EVENT = "florflow:mock-data:changed";
+const mockListeners = new Set<() => void>();
+
+let mockSnapshot = {
+  version: 0,
+  orders,
+  orderItems,
+  customers,
+  deliveries,
+  orderNotes,
+  orderAddresses,
+};
+
+const replaceArray = <T,>(target: T[], next: T[] | undefined) => {
+  if (!next) return;
+  target.splice(0, target.length, ...next);
+};
+
+const replaceRecord = <T extends Record<string, string>>(target: T, next: T | undefined) => {
+  Object.keys(target).forEach((key) => delete target[key]);
+  if (next) Object.assign(target, next);
+};
+
+const refreshMockSnapshot = () => {
+  mockSnapshot = {
+    version: mockSnapshot.version + 1,
+    orders,
+    orderItems,
+    customers,
+    deliveries,
+    orderNotes,
+    orderAddresses,
+  };
+};
+
+const persistMockData = () => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    MOCK_DATA_KEY,
+    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses })
+  );
+};
+
+const emitMockDataChange = (reason: string) => {
+  refreshMockSnapshot();
+  persistMockData();
+  console.log(`[mockData] ${reason}`, {
+    orders: orders.length,
+    customers: customers.length,
+    deliveries: deliveries.length,
+  });
+  mockListeners.forEach((listener) => listener());
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(MOCK_DATA_EVENT, { detail: { reason } }));
+  }
+};
+
+const hydrateMockData = () => {
+  if (typeof window === "undefined") return;
+  const raw = window.localStorage.getItem(MOCK_DATA_KEY);
+  if (!raw) return;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<typeof mockSnapshot>;
+    replaceArray(orders, parsed.orders);
+    replaceArray(orderItems, parsed.orderItems);
+    replaceArray(customers, parsed.customers);
+    replaceArray(deliveries, parsed.deliveries);
+    replaceRecord(orderNotes, parsed.orderNotes as typeof orderNotes | undefined);
+    replaceRecord(orderAddresses, parsed.orderAddresses as typeof orderAddresses | undefined);
+    refreshMockSnapshot();
+  } catch (error) {
+    console.error("[mockData] erro ao hidratar mock persistido", error);
+  }
+};
+
+if (typeof window !== "undefined" && !mockRuntime.__florflowMockDataInitialized__) {
+  mockRuntime.__florflowMockDataInitialized__ = true;
+  hydrateMockData();
+  window.addEventListener("storage", (event) => {
+    if (event.key !== MOCK_DATA_KEY || !event.newValue) return;
+    hydrateMockData();
+    mockListeners.forEach((listener) => listener());
+  });
+  window.addEventListener(MOCK_DATA_EVENT, () => {
+    refreshMockSnapshot();
+    mockListeners.forEach((listener) => listener());
+  });
+}
+
+export function subscribeMockData(listener: () => void) {
+  mockListeners.add(listener);
+  return () => mockListeners.delete(listener);
+}
+
+export function getMockDataSnapshot() {
+  return mockSnapshot;
+}
+
 /* Tenant-scoped accessors — mirror the queries you'll do via Supabase RLS. */
 export const byStore = {
   store: (slug: string) => stores.find((s) => s.slug === slug) ?? null,
@@ -133,6 +237,8 @@ export function updateOrderStatus(store_id: string, order_id: string, status: Or
   const o = orders.find((x) => x.store_id === store_id && x.id === order_id);
   if (!o) return null;
   o.status = status;
+  console.log("[mockData] status atualizado", { store_id, order_id, status });
+  emitMockDataChange(`updateOrderStatus:${order_id}`);
   return o;
 }
 
@@ -199,6 +305,7 @@ const genId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export function createOrder(store_id: string, input: CreateOrderInput): Order {
+  console.log("[mockData] createOrder:store", { store_id, items: input.items.length });
   const customer: Customer = {
     id: genId("cu"),
     store_id,
@@ -248,5 +355,11 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
     });
   }
 
+  console.log("[mockData] pedido criado", {
+    store_id,
+    order,
+    totalOrdersForStore: orders.filter((item) => item.store_id === store_id).length,
+  });
+  emitMockDataChange(`createOrder:${order.id}`);
   return order;
 }
