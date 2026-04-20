@@ -369,3 +369,108 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
   emitMockDataChange(`createOrder:${order.id}`);
   return order;
 }
+
+/* ---------- Catalog mutations ---------- */
+
+const slugify = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+export interface ProductInput {
+  name: string;
+  description?: string;
+  price_cents: number;
+  category_id?: string | null;
+  image_url?: string | null;
+  active?: boolean;
+  stock?: number | null;
+}
+
+export function createProduct(store_id: string, input: ProductInput): Product {
+  const product: Product = {
+    id: genId("p"),
+    store_id,
+    category_id: input.category_id ?? null,
+    name: input.name.trim(),
+    description: input.description?.trim() ?? "",
+    price_cents: input.price_cents,
+    image_url: input.image_url ?? null,
+    active: input.active ?? true,
+    stock: input.stock ?? null,
+    created_at: new Date().toISOString(),
+  };
+  products.push(product);
+  emitMockDataChange(`createProduct:${product.id}`);
+  return product;
+}
+
+export function updateProduct(store_id: string, product_id: string, patch: Partial<ProductInput>): Product | null {
+  const p = products.find((x) => x.store_id === store_id && x.id === product_id);
+  if (!p) return null;
+  Object.assign(p, {
+    ...patch,
+    name: patch.name?.trim() ?? p.name,
+    description: patch.description?.trim() ?? p.description,
+  });
+  emitMockDataChange(`updateProduct:${product_id}`);
+  return p;
+}
+
+export function deleteProduct(store_id: string, product_id: string): boolean {
+  const idx = products.findIndex((x) => x.store_id === store_id && x.id === product_id);
+  if (idx < 0) return false;
+  products.splice(idx, 1);
+  emitMockDataChange(`deleteProduct:${product_id}`);
+  return true;
+}
+
+export function toggleProductActive(store_id: string, product_id: string): Product | null {
+  const p = products.find((x) => x.store_id === store_id && x.id === product_id);
+  if (!p) return null;
+  p.active = !p.active;
+  emitMockDataChange(`toggleProductActive:${product_id}`);
+  return p;
+}
+
+export interface CategoryInput {
+  name: string;
+  position?: number;
+}
+
+export function createCategory(store_id: string, input: CategoryInput): Category {
+  const maxPos = categories.filter((c) => c.store_id === store_id).reduce((m, c) => Math.max(m, c.position), 0);
+  const cat: Category = {
+    id: genId("c"),
+    store_id,
+    name: input.name.trim(),
+    slug: slugify(input.name),
+    position: input.position ?? maxPos + 1,
+  };
+  categories.push(cat);
+  emitMockDataChange(`createCategory:${cat.id}`);
+  return cat;
+}
+
+export function updateCategory(store_id: string, category_id: string, patch: Partial<CategoryInput>): Category | null {
+  const c = categories.find((x) => x.store_id === store_id && x.id === category_id);
+  if (!c) return null;
+  if (patch.name !== undefined) {
+    c.name = patch.name.trim();
+    c.slug = slugify(patch.name);
+  }
+  if (patch.position !== undefined) c.position = patch.position;
+  emitMockDataChange(`updateCategory:${category_id}`);
+  return c;
+}
+
+export function deleteCategory(store_id: string, category_id: string): boolean {
+  const idx = categories.findIndex((x) => x.store_id === store_id && x.id === category_id);
+  if (idx < 0) return false;
+  categories.splice(idx, 1);
+  products.forEach((p) => {
+    if (p.store_id === store_id && p.category_id === category_id) p.category_id = null;
+  });
+  emitMockDataChange(`deleteCategory:${category_id}`);
+  return true;
+}
+
