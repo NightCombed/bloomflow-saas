@@ -127,6 +127,7 @@ export default function PublicCheckout() {
   const onSubmit = (values: CheckoutValues) => {
     setSubmitting(true);
     try {
+      console.log("[PublicCheckout] criando pedido", { store_id: store.id, slug: store.slug, items: items.length });
       const order = createOrder(store.id, {
         customer: { name: values.name, phone: values.phone },
         address: values.address,
@@ -138,6 +139,7 @@ export default function PublicCheckout() {
           unit_price_cents: i.unit_price_cents,
         })),
       });
+      console.log("[PublicCheckout] pedido criado", { order_id: order.id, store_id: order.store_id });
       clear();
       toast.success("Pedido enviado!", { description: "Em breve a floricultura entrará em contato." });
       navigate(`/loja/${store.slug}/pedido/${order.id}`);

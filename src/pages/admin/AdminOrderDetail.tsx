@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useActiveStore } from "@/hooks/useActiveStore";
 import { useMockData } from "@/hooks/useMockData";
