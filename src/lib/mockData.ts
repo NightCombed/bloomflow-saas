@@ -585,3 +585,28 @@ export function toggleShippingRuleActive(store_id: string, rule_id: string): Shi
   emitMockDataChange(`toggleShippingRuleActive:${rule_id}`);
   return r;
 }
+
+/* ---------- Store settings mutation ---------- */
+
+export type StoreSettingsPatch = Partial<Omit<StoreSettings, "store_id">>;
+
+const composeAddress = (s: StoreSettings) => {
+  const left = [s.address_street, s.address_number].filter(Boolean).join(", ");
+  const cityState = [s.address_city, s.address_state].filter(Boolean).join(" — ");
+  return [left, s.address_neighborhood, cityState].filter(Boolean).join(" — ");
+};
+
+export function updateStoreSettings(store_id: string, patch: StoreSettingsPatch): StoreSettings | null {
+  const s = storeSettings.find((x) => x.store_id === store_id);
+  if (!s) return null;
+  Object.assign(s, patch);
+  // Recompose single-line address from structured fields if any structured field was provided
+  const structuralKeys: (keyof StoreSettings)[] = [
+    "address_street", "address_number", "address_neighborhood", "address_city", "address_state",
+  ];
+  if (structuralKeys.some((k) => k in patch)) {
+    s.address = composeAddress(s);
+  }
+  emitMockDataChange(`updateStoreSettings:${store_id}`);
+  return s;
+}
