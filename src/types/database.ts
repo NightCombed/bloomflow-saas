@@ -41,13 +41,21 @@ export interface StoreMember {
 export interface StoreSettings {
   store_id: UUID;
   display_name: string;
-  tagline?: string;
+  tagline?: string;            // home message
   logo_url?: string | null;
-  brand_color: string;       // hsl token override
+  brand_color: string;         // primary HSL "H S% L%"
+  secondary_color?: string;    // optional accent HSL
   whatsapp?: string;
-  address?: string;
-  currency: string;          // "BRL"
-  timezone: string;          // "America/Sao_Paulo"
+  address?: string;            // pre-rendered single-line for display/fallback
+  address_street?: string;
+  address_number?: string;
+  address_neighborhood?: string;
+  address_city?: string;
+  address_state?: string;
+  opening_hours?: string;
+  contact_message_template?: string;
+  currency: string;            // "BRL"
+  timezone: string;            // "America/Sao_Paulo"
 }
 
 /* ---------- Catalog ---------- */
