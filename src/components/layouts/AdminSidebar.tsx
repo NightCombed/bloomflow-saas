@@ -12,7 +12,7 @@ const items = [
   { title: "Categorias", url: "/admin/categorias", icon: Tag },
   { title: "Pedidos", url: "/admin/pedidos", icon: ShoppingBag },
   { title: "Clientes", url: "/admin/clientes", icon: Users },
-  { title: "Entregas", url: "/admin/entregas", icon: Truck },
+  { title: "Entregas e frete", url: "/admin/entregas", icon: Truck },
   { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
 ];
 
