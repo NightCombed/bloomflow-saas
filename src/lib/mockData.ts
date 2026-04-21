@@ -499,3 +499,50 @@ export function deleteCategory(store_id: string, category_id: string): boolean {
   return true;
 }
 
+
+/* ---------- Shipping rules (regions) mutations ---------- */
+
+export interface ShippingRuleInput {
+  name: string;
+  price_cents: number;
+  active?: boolean;
+}
+
+export function createShippingRule(store_id: string, input: ShippingRuleInput): ShippingRule {
+  const rule: ShippingRule = {
+    id: genId("sr"),
+    store_id,
+    name: input.name.trim(),
+    price_cents: input.price_cents,
+    active: input.active ?? true,
+  };
+  shippingRules.push(rule);
+  emitMockDataChange(`createShippingRule:${rule.id}`);
+  return rule;
+}
+
+export function updateShippingRule(store_id: string, rule_id: string, patch: Partial<ShippingRuleInput>): ShippingRule | null {
+  const r = shippingRules.find((x) => x.store_id === store_id && x.id === rule_id);
+  if (!r) return null;
+  if (patch.name !== undefined) r.name = patch.name.trim();
+  if (patch.price_cents !== undefined) r.price_cents = patch.price_cents;
+  if (patch.active !== undefined) r.active = patch.active;
+  emitMockDataChange(`updateShippingRule:${rule_id}`);
+  return r;
+}
+
+export function deleteShippingRule(store_id: string, rule_id: string): boolean {
+  const idx = shippingRules.findIndex((x) => x.store_id === store_id && x.id === rule_id);
+  if (idx < 0) return false;
+  shippingRules.splice(idx, 1);
+  emitMockDataChange(`deleteShippingRule:${rule_id}`);
+  return true;
+}
+
+export function toggleShippingRuleActive(store_id: string, rule_id: string): ShippingRule | null {
+  const r = shippingRules.find((x) => x.store_id === store_id && x.id === rule_id);
+  if (!r) return null;
+  r.active = !r.active;
+  emitMockDataChange(`toggleShippingRuleActive:${rule_id}`);
+  return r;
+}
