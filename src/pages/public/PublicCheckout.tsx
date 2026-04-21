@@ -5,12 +5,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, MapPin, Store as StoreIcon, Truck, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useTenant } from "@/contexts/TenantContext";
 import { useCart } from "@/contexts/CartContext";
-import { createOrder, formatBRL } from "@/lib/mockData";
+import { useMockData } from "@/hooks/useMockData";
+import { byStore, createOrder, formatBRL } from "@/lib/mockData";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,23 +19,43 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { OrderSummary } from "@/components/store/OrderSummary";
 import { buildWhatsAppUrl } from "@/components/store/WhatsAppButton";
 import { EmptyState } from "@/components/store/EmptyState";
 import { cn } from "@/lib/utils";
 
-const checkoutSchema = z.object({
-  name: z.string().trim().min(2, "Informe seu nome").max(100, "Máximo 100 caracteres"),
+const baseSchema = z.object({
+  delivery_type: z.enum(["delivery", "pickup"]),
+  name: z.string().trim().min(2, "Informe seu nome").max(100),
   phone: z
     .string()
     .trim()
     .min(8, "Telefone inválido")
-    .max(20, "Telefone inválido")
+    .max(20)
     .regex(/^[0-9()+\-\s]+$/, "Use apenas números e ( ) + - "),
-  address: z.string().trim().min(4, "Informe o bairro ou endereço").max(200, "Máximo 200 caracteres"),
+  street: z.string().trim().max(120).optional(),
+  number: z.string().trim().max(20).optional(),
+  neighborhood: z.string().trim().max(80).optional(),
+  complement: z.string().trim().max(120).optional(),
+  immediate: z.boolean(),
   deliveryDate: z.date().optional(),
-  notes: z.string().trim().max(500, "Máximo 500 caracteres").optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+const checkoutSchema = baseSchema.superRefine((data, ctx) => {
+  if (data.delivery_type === "delivery") {
+    if (!data.street || data.street.length < 2) {
+      ctx.addIssue({ code: "custom", path: ["street"], message: "Informe a rua" });
+    }
+    if (!data.number || data.number.length < 1) {
+      ctx.addIssue({ code: "custom", path: ["number"], message: "Informe o número" });
+    }
+    if (!data.neighborhood || data.neighborhood.length < 2) {
+      ctx.addIssue({ code: "custom", path: ["neighborhood"], message: "Informe o bairro" });
+    }
+  }
 });
 
 type CheckoutValues = z.infer<typeof checkoutSchema>;
@@ -46,39 +67,67 @@ const NOTE_SUGGESTIONS = [
   "Deixar com a portaria",
 ];
 
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
 export default function PublicCheckout() {
   const { store, settings } = useTenant();
   const { items, subtotalCents, notes, setNotes, clear } = useCart();
   const navigate = useNavigate();
+  const snapshot = useMockData();
   const [submitting, setSubmitting] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const form = useForm<CheckoutValues>({
     resolver: zodResolver(checkoutSchema),
-    defaultValues: { name: "", phone: "", address: "", notes: notes ?? "" },
+    defaultValues: {
+      delivery_type: "delivery",
+      name: "",
+      phone: "",
+      street: "",
+      number: "",
+      neighborhood: "",
+      complement: "",
+      immediate: true,
+      notes: notes ?? "",
+    },
   });
 
-  // Watch form fields reactively so the WhatsApp href is ALWAYS up-to-date.
-  // This avoids any async work inside the click handler, which would break
-  // user activation and trigger popup blockers.
   const watched = form.watch();
-  const whatsappHref = useMemo(() => {
-    if (!settings?.whatsapp || !store) return "#";
-    const lines: string[] = [];
-    lines.push(`*Novo pedido — ${settings?.display_name ?? store.name}*`, "");
-    lines.push("*Itens:*");
-    for (const it of items) {
-      lines.push(`• ${it.quantity}× ${it.name} — ${formatBRL(it.unit_price_cents * it.quantity)}`);
-    }
-    lines.push("", `*Total:* ${formatBRL(subtotalCents)}`, "");
-    lines.push(`*Cliente:* ${watched.name ?? ""}`);
-    lines.push(`*Telefone:* ${watched.phone ?? ""}`);
-    lines.push(`*Endereço:* ${watched.address ?? ""}`);
-    if (watched.deliveryDate) {
-      lines.push(`*Entrega:* ${format(watched.deliveryDate, "dd/MM/yyyy", { locale: ptBR })}`);
-    }
-    if (watched.notes) lines.push("", `*Observações:* ${watched.notes}`);
-    return buildWhatsAppUrl(settings.whatsapp, lines.join("\n"));
-  }, [settings?.whatsapp, settings?.display_name, store, items, subtotalCents, watched.name, watched.phone, watched.address, watched.deliveryDate, watched.notes]);
+  const deliveryType = watched.delivery_type;
+  const neighborhoodInput = watched.neighborhood ?? "";
+  const immediate = watched.immediate;
+
+  // Active shipping rules for this store
+  const rules = useMemo(() => {
+    if (!store) return [];
+    return byStore.shippingRules(store.id).filter((r) => r.active);
+    // re-compute when mock store changes
+  }, [store, snapshot.version]);
+
+  // Match neighborhood -> rule
+  const matchedRule = useMemo(() => {
+    if (deliveryType !== "delivery") return null;
+    const n = norm(neighborhoodInput);
+    if (!n) return null;
+    return rules.find((r) => norm(r.name) === n) ?? null;
+  }, [rules, neighborhoodInput, deliveryType]);
+
+  const suggestions = useMemo(() => {
+    const n = norm(neighborhoodInput);
+    if (!n) return rules.slice(0, 6);
+    return rules.filter((r) => norm(r.name).includes(n)).slice(0, 6);
+  }, [rules, neighborhoodInput]);
+
+  const shippingFeeCents = deliveryType === "delivery" ? matchedRule?.price_cents ?? 0 : 0;
+  const shippingPending =
+    deliveryType === "delivery" && neighborhoodInput.trim().length > 0 && !matchedRule;
+  const shippingLabel =
+    deliveryType === "pickup"
+      ? "Retirada"
+      : matchedRule
+        ? matchedRule.name
+        : null;
 
   if (!store) return null;
 
@@ -106,32 +155,73 @@ export default function PublicCheckout() {
     setNotes(trimmed);
   };
 
-  const buildWhatsAppMessage = (values: CheckoutValues) => {
+  const formatAddressLine = (v: CheckoutValues) => {
+    const left = [v.street, v.number].filter(Boolean).join(", ");
+    return [left, v.neighborhood, v.complement].filter(Boolean).join(" — ");
+  };
+
+  const buildWhatsAppMessage = (v: CheckoutValues, totalCents: number) => {
     const lines: string[] = [];
     lines.push(`*Novo pedido — ${settings?.display_name ?? store.name}*`, "");
     lines.push("*Itens:*");
     for (const it of items) {
       lines.push(`• ${it.quantity}× ${it.name} — ${formatBRL(it.unit_price_cents * it.quantity)}`);
     }
-    lines.push("", `*Total:* ${formatBRL(subtotalCents)}`, "");
-    lines.push(`*Cliente:* ${values.name}`);
-    lines.push(`*Telefone:* ${values.phone}`);
-    lines.push(`*Endereço:* ${values.address}`);
-    if (values.deliveryDate) {
-      lines.push(`*Entrega:* ${format(values.deliveryDate, "dd/MM/yyyy", { locale: ptBR })}`);
+    lines.push("", `*Subtotal:* ${formatBRL(subtotalCents)}`);
+    lines.push(
+      `*Frete:* ${
+        v.delivery_type === "pickup"
+          ? "Retirada na loja"
+          : matchedRule
+            ? `${matchedRule.name} — ${formatBRL(shippingFeeCents)}`
+            : shippingFeeCents === 0
+              ? "Grátis"
+              : formatBRL(shippingFeeCents)
+      }`
+    );
+    lines.push(`*Total:* ${formatBRL(totalCents)}`, "");
+    lines.push(`*Cliente:* ${v.name}`);
+    lines.push(`*Telefone:* ${v.phone}`);
+    if (v.delivery_type === "delivery") {
+      lines.push(`*Entrega em:* ${formatAddressLine(v)}`);
+    } else {
+      lines.push(`*Retirada na loja*${settings?.address ? ` — ${settings.address}` : ""}`);
     }
-    if (values.notes) lines.push("", `*Observações:* ${values.notes}`);
+    if (!v.immediate && v.deliveryDate) {
+      lines.push(`*Data:* ${format(v.deliveryDate, "dd/MM/yyyy", { locale: ptBR })}`);
+    } else {
+      lines.push(`*Quando:* o mais rápido possível`);
+    }
+    if (v.notes) lines.push("", `*Observações:* ${v.notes}`);
     return lines.join("\n");
   };
 
   const onSubmit = (values: CheckoutValues) => {
+    if (values.delivery_type === "delivery" && shippingPending) {
+      toast.error("Região não atendida", {
+        description: "Selecione um bairro da lista ou entre em contato pelo WhatsApp.",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
-      console.log("[PublicCheckout] criando pedido", { store_id: store.id, slug: store.slug, items: items.length });
       const order = createOrder(store.id, {
         customer: { name: values.name, phone: values.phone },
-        address: values.address,
-        scheduled_for: values.deliveryDate ? values.deliveryDate.toISOString() : null,
+        delivery_type: values.delivery_type,
+        address:
+          values.delivery_type === "delivery"
+            ? {
+                street: values.street,
+                number: values.number,
+                neighborhood: values.neighborhood,
+                complement: values.complement,
+              }
+            : undefined,
+        shipping_region_id: matchedRule?.id ?? null,
+        shipping_region_name: matchedRule?.name ?? null,
+        shipping_fee_cents: shippingFeeCents,
+        scheduled_for:
+          !values.immediate && values.deliveryDate ? values.deliveryDate.toISOString() : null,
         notes: values.notes,
         items: items.map((i) => ({
           product_id: i.productId,
@@ -139,7 +229,6 @@ export default function PublicCheckout() {
           unit_price_cents: i.unit_price_cents,
         })),
       });
-      console.log("[PublicCheckout] pedido criado", { order_id: order.id, store_id: order.store_id });
       clear();
       toast.success("Pedido enviado!", { description: "Em breve a floricultura entrará em contato." });
       navigate(`/loja/${store.slug}/pedido/${order.id}`);
@@ -148,6 +237,30 @@ export default function PublicCheckout() {
     }
   };
 
+  const totalCents = subtotalCents + (shippingPending ? 0 : shippingFeeCents);
+
+  const whatsappHref = useMemo(() => {
+    if (!settings?.whatsapp) return "#";
+    return buildWhatsAppUrl(settings.whatsapp, buildWhatsAppMessage(watched, totalCents));
+    // recompute on field/shipping changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    settings?.whatsapp,
+    watched.name,
+    watched.phone,
+    watched.street,
+    watched.number,
+    watched.neighborhood,
+    watched.complement,
+    watched.delivery_type,
+    watched.immediate,
+    watched.deliveryDate,
+    watched.notes,
+    matchedRule?.id,
+    shippingFeeCents,
+    totalCents,
+    items,
+  ]);
 
   const handleWhatsApp = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!settings?.whatsapp) {
@@ -155,36 +268,12 @@ export default function PublicCheckout() {
       toast.error("WhatsApp da loja não configurado");
       return;
     }
-    // Synchronous validation only — preserves user activation
     const v = form.getValues();
-    const missing =
-      !v.name?.trim() ||
-      !v.phone?.trim() ||
-      !v.address?.trim() ||
-      v.name.trim().length < 2 ||
-      v.phone.trim().length < 8 ||
-      v.address.trim().length < 4;
-    if (missing) {
+    if (!v.name?.trim() || !v.phone?.trim()) {
       e.preventDefault();
       form.trigger();
-      toast.error("Preencha os dados antes de enviar pelo WhatsApp");
+      toast.error("Preencha nome e telefone antes de enviar pelo WhatsApp");
       return;
-    }
-    // Fallback synchronous open — if the <a target="_blank"> is blocked by the
-    // sandboxed iframe, this still navigates the top window to the URL.
-    // We DON'T preventDefault here — the native link behavior is the primary path.
-    try {
-      // If we are inside a sandboxed iframe (e.g. Lovable preview) without
-      // allow-popups, target=_blank is silently blocked. Detect and fallback.
-      const inIframe = window.self !== window.top;
-      if (inIframe) {
-        e.preventDefault();
-        window.open(whatsappHref, "_blank", "noopener,noreferrer");
-      }
-    } catch {
-      // cross-origin access throws — assume iframe and fallback
-      e.preventDefault();
-      window.open(whatsappHref, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -195,6 +284,79 @@ export default function PublicCheckout() {
       <div className="grid lg:grid-cols-[1fr_380px] gap-8">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+
+            {/* Delivery type selector */}
+            <section className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4 shadow-soft">
+              <h2 className="font-serif text-xl">Como você quer receber?</h2>
+              <FormField
+                control={form.control}
+                name="delivery_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <RadioGroup
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        className="grid sm:grid-cols-2 gap-3"
+                      >
+                        <Label
+                          htmlFor="dt-delivery"
+                          className={cn(
+                            "flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors",
+                            field.value === "delivery"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          )}
+                        >
+                          <RadioGroupItem id="dt-delivery" value="delivery" className="mt-1" />
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              <Truck className="h-4 w-4" /> Entregar
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Receba no endereço informado.
+                            </div>
+                          </div>
+                        </Label>
+                        <Label
+                          htmlFor="dt-pickup"
+                          className={cn(
+                            "flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-colors",
+                            field.value === "pickup"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          )}
+                        >
+                          <RadioGroupItem id="dt-pickup" value="pickup" className="mt-1" />
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              <StoreIcon className="h-4 w-4" /> Retirar na loja
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Sem custo de frete.
+                            </div>
+                          </div>
+                        </Label>
+                      </RadioGroup>
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {deliveryType === "pickup" && (
+                <div className="rounded-lg bg-muted/50 p-4 text-sm flex gap-3">
+                  <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <div className="font-medium">Endereço da loja</div>
+                    <div className="text-muted-foreground mt-0.5">
+                      {settings?.address ?? "Endereço não informado pela loja."}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Customer data */}
             <section className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-5 shadow-soft">
               <h2 className="font-serif text-xl">Seus dados</h2>
 
@@ -225,63 +387,198 @@ export default function PublicCheckout() {
                   </FormItem>
                 )}
               />
-
-              <FormField
-                control={form.control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Bairro ou endereço de entrega</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Vila Madalena, Rua X, 123" maxLength={200} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="deliveryDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de entrega (opcional)</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={cn(
-                              "justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="h-4 w-4" />
-                            {field.value
-                              ? format(field.value, "PPP", { locale: ptBR })
-                              : "Escolher uma data"}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-                          initialFocus
-                          locale={ptBR}
-                          className={cn("p-3 pointer-events-auto")}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </section>
 
+            {/* Address — only when delivery */}
+            {deliveryType === "delivery" && (
+              <section className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-5 shadow-soft">
+                <h2 className="font-serif text-xl">Endereço de entrega</h2>
+
+                <div className="grid sm:grid-cols-[1fr_120px] gap-4">
+                  <FormField
+                    control={form.control}
+                    name="street"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rua</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ex: Rua das Flores" maxLength={120} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="number"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número</FormLabel>
+                        <FormControl>
+                          <Input placeholder="123" maxLength={20} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="neighborhood"
+                  render={({ field }) => (
+                    <FormItem className="relative">
+                      <FormLabel>Bairro / região</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Comece a digitar..."
+                          maxLength={80}
+                          autoComplete="off"
+                          {...field}
+                          onFocus={() => setShowSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            setShowSuggestions(true);
+                          }}
+                        />
+                      </FormControl>
+                      {showSuggestions && suggestions.length > 0 && (
+                        <div className="absolute z-10 left-0 right-0 top-full mt-1 rounded-md border border-border bg-popover shadow-md max-h-60 overflow-auto">
+                          {suggestions.map((s) => (
+                            <button
+                              type="button"
+                              key={s.id}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                form.setValue("neighborhood", s.name, { shouldValidate: true });
+                                setShowSuggestions(false);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center justify-between gap-2"
+                            >
+                              <span className="truncate">{s.name}</span>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {formatBRL(s.price_cents)}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {shippingPending && !showSuggestions && (
+                        <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 mt-1">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>
+                            Região não cadastrada. O frete será confirmado pela floricultura — ou
+                            entre em contato pelo WhatsApp.
+                          </span>
+                        </div>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="complement"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Complemento (opcional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Apto, bloco, ponto de referência..." maxLength={120} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </section>
+            )}
+
+            {/* Date */}
+            <section className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4 shadow-soft">
+              <h2 className="font-serif text-xl">
+                {deliveryType === "delivery" ? "Quando entregar?" : "Quando retirar?"}
+              </h2>
+
+              <FormField
+                control={form.control}
+                name="immediate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <RadioGroup
+                        value={field.value ? "now" : "scheduled"}
+                        onValueChange={(v) => field.onChange(v === "now")}
+                        className="space-y-2"
+                      >
+                        <Label
+                          htmlFor="t-now"
+                          className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-pointer hover:border-primary/40"
+                        >
+                          <RadioGroupItem id="t-now" value="now" />
+                          <span className="text-sm">
+                            {deliveryType === "delivery"
+                              ? "Entregar o mais rápido possível"
+                              : "Retirar o mais rápido possível"}
+                          </span>
+                        </Label>
+                        <Label
+                          htmlFor="t-sched"
+                          className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-pointer hover:border-primary/40"
+                        >
+                          <RadioGroupItem id="t-sched" value="scheduled" />
+                          <span className="text-sm">Escolher uma data</span>
+                        </Label>
+                      </RadioGroup>
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {!immediate && (
+                <FormField
+                  control={form.control}
+                  name="deliveryDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={cn(
+                                "justify-start text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="h-4 w-4" />
+                              {field.value
+                                ? format(field.value, "PPP", { locale: ptBR })
+                                : "Escolher uma data"}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                            initialFocus
+                            locale={ptBR}
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </section>
+
+            {/* Notes */}
             <section className="rounded-xl border border-border bg-card p-5 md:p-6 space-y-4 shadow-soft">
               <h2 className="font-serif text-xl">Observações</h2>
               <div className="flex flex-wrap gap-2">
@@ -340,7 +637,11 @@ export default function PublicCheckout() {
         </Form>
 
         <aside className="lg:sticky lg:top-20 lg:self-start">
-          <OrderSummary />
+          <OrderSummary
+            shippingFeeCents={shippingFeeCents}
+            shippingLabel={shippingLabel}
+            shippingPending={shippingPending}
+          />
         </aside>
       </div>
     </div>
