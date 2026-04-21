@@ -92,11 +92,26 @@ export type OrderStatus =
   | "delivered"
   | "canceled";
 
+export type DeliveryType = "delivery" | "pickup";
+
+export interface OrderAddress {
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  complement?: string;
+  full?: string; // pre-rendered single-line for display
+}
+
 export interface Order {
   id: UUID;
   store_id: UUID;
   customer_id: UUID;
   status: OrderStatus;
+  delivery_type: DeliveryType;
+  shipping_region_id?: UUID | null;
+  shipping_region_name?: string | null;
+  shipping_fee_cents: number;
+  subtotal_cents: number;
   total_cents: number;
   delivery_id?: UUID | null;
   created_at: ISODate;
@@ -116,10 +131,10 @@ export interface OrderItem {
 export interface ShippingRule {
   id: UUID;
   store_id: UUID;
-  name: string;
-  region: string;            // CEP prefix or neighborhood
+  name: string;              // neighborhood / region name shown to customer
+  region?: string;           // optional extra (e.g. CEP prefix)
   price_cents: number;
-  eta_hours: number;
+  eta_hours?: number;
   active: boolean;
 }
 
