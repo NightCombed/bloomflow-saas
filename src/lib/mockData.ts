@@ -304,7 +304,16 @@ export const ORDER_STATUS_FLOW: Order["status"][] = [
 
 export interface CreateOrderInput {
   customer: { name: string; phone: string; email?: string };
-  address: string;
+  delivery_type: "delivery" | "pickup";
+  address?: {
+    street?: string;
+    number?: string;
+    neighborhood?: string;
+    complement?: string;
+  };
+  shipping_region_id?: string | null;
+  shipping_region_name?: string | null;
+  shipping_fee_cents?: number;
   scheduled_for?: string | null;
   notes?: string;
   items: { product_id: string; quantity: number; unit_price_cents: number }[];
@@ -313,8 +322,15 @@ export interface CreateOrderInput {
 const genId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+const formatAddress = (a?: CreateOrderInput["address"]) => {
+  if (!a) return "";
+  const left = [a.street, a.number].filter(Boolean).join(", ");
+  const parts = [left, a.neighborhood, a.complement].filter(Boolean);
+  return parts.join(" — ");
+};
+
 export function createOrder(store_id: string, input: CreateOrderInput): Order {
-  console.log("[mockData] createOrder:store", { store_id, items: input.items.length });
+  console.log("[mockData] createOrder:store", { store_id, delivery_type: input.delivery_type, items: input.items.length });
   const customer: Customer = {
     id: genId("cu"),
     store_id,
@@ -325,13 +341,21 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
   };
   customers.push(customer);
 
-  const total_cents = input.items.reduce((n, i) => n + i.quantity * i.unit_price_cents, 0);
+  const subtotal_cents = input.items.reduce((n, i) => n + i.quantity * i.unit_price_cents, 0);
+  const shipping_fee_cents = input.delivery_type === "delivery" ? (input.shipping_fee_cents ?? 0) : 0;
+  const total_cents = subtotal_cents + shipping_fee_cents;
+  const fullAddress = input.delivery_type === "delivery" ? formatAddress(input.address) : "";
 
   const order: Order = {
     id: genId("o"),
     store_id,
     customer_id: customer.id,
     status: "pending",
+    delivery_type: input.delivery_type,
+    shipping_region_id: input.delivery_type === "delivery" ? input.shipping_region_id ?? null : null,
+    shipping_region_name: input.delivery_type === "delivery" ? input.shipping_region_name ?? null : null,
+    shipping_fee_cents,
+    subtotal_cents,
     total_cents,
     created_at: new Date().toISOString(),
   };
@@ -348,26 +372,24 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
     });
   }
 
-  // Persist address & notes in the same maps the admin panel reads from.
-  if (input.address) orderAddresses[order.id] = input.address;
+  if (fullAddress) orderAddresses[order.id] = fullAddress;
   if (input.notes && input.notes.trim()) orderNotes[order.id] = input.notes.trim();
 
-  if (input.scheduled_for || input.address) {
+  if (input.delivery_type === "delivery" && fullAddress) {
     deliveries.push({
       id: genId("d"),
       store_id,
       order_id: order.id,
       recipient_name: customer.name,
-      address: input.address,
+      address: fullAddress,
       scheduled_for: input.scheduled_for ?? new Date().toISOString(),
       status: "scheduled",
     });
   }
 
   console.log("[mockData] pedido criado", {
-    store_id,
-    order,
-    totalOrdersForStore: orders.filter((item) => item.store_id === store_id).length,
+    store_id, order_id: order.id, delivery_type: order.delivery_type,
+    subtotal_cents, shipping_fee_cents, total_cents,
   });
   emitMockDataChange(`createOrder:${order.id}`);
   return order;
