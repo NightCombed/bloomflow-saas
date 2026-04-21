@@ -26,6 +26,7 @@ import AdminOrders from "@/pages/admin/AdminOrders";
 import AdminOrderDetail from "@/pages/admin/AdminOrderDetail";
 import AdminProducts from "@/pages/admin/AdminProducts";
 import AdminCategories from "@/pages/admin/AdminCategories";
+import AdminShipping from "@/pages/admin/AdminShipping";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 
 import SuperAdminLayout from "@/components/layouts/SuperAdminLayout";
@@ -78,7 +79,7 @@ const App = () => (
               <Route path="pedidos" element={<AdminOrders />} />
               <Route path="pedidos/:orderId" element={<AdminOrderDetail />} />
               <Route path="clientes" element={<PlaceholderPage title="Clientes" />} />
-              <Route path="entregas" element={<PlaceholderPage title="Entregas" description="Rotas, regras de frete e agendamentos." />} />
+              <Route path="entregas" element={<AdminShipping />} />
               <Route path="configuracoes" element={<PlaceholderPage title="Configurações" description="Identidade visual, contato e domínio." />} />
             </Route>
 

@@ -3,8 +3,16 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { formatBRL } from "@/lib/mockData";
 
-export function OrderSummary() {
+interface OrderSummaryProps {
+  shippingFeeCents?: number;
+  shippingLabel?: string | null;
+  /** When true, shows "A calcular" instead of a value or 0 */
+  shippingPending?: boolean;
+}
+
+export function OrderSummary({ shippingFeeCents = 0, shippingLabel, shippingPending }: OrderSummaryProps) {
   const { items, subtotalCents } = useCart();
+  const totalCents = subtotalCents + (shippingPending ? 0 : shippingFeeCents);
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-soft">
@@ -32,13 +40,29 @@ export function OrderSummary() {
         ))}
       </div>
       <Separator />
+      <dl className="space-y-1.5 text-sm">
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">Subtotal</dt>
+          <dd className="tabular-nums">{formatBRL(subtotalCents)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">
+            Frete{shippingLabel ? ` · ${shippingLabel}` : ""}
+          </dt>
+          <dd className="tabular-nums">
+            {shippingPending
+              ? <span className="text-muted-foreground">A calcular</span>
+              : shippingFeeCents === 0
+                ? <span className="text-primary font-medium">Grátis</span>
+                : formatBRL(shippingFeeCents)}
+          </dd>
+        </div>
+      </dl>
+      <Separator />
       <div className="flex justify-between items-baseline">
         <span className="text-muted-foreground">Total</span>
-        <span className="font-serif text-2xl text-primary">{formatBRL(subtotalCents)}</span>
+        <span className="font-serif text-2xl text-primary">{formatBRL(totalCents)}</span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        O valor do frete será confirmado pela floricultura.
-      </p>
     </div>
   );
 }

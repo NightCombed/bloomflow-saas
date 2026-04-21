@@ -7,7 +7,7 @@ import {
 } from "@/lib/mockData";
 import type { Order } from "@/types/database";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Phone, MapPin, Copy, MessageCircle } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Copy, MessageCircle, Truck, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -131,15 +131,39 @@ export default function AdminOrderDetail() {
           )}
         </section>
 
-        {/* Address */}
+        {/* Address / Delivery */}
         <section className="rounded-xl border border-border bg-card p-5 space-y-3 lg:col-span-2">
           <div className="flex items-center justify-between">
-            <h2 className="font-medium flex items-center gap-2"><MapPin className="h-4 w-4" /> Entrega</h2>
-            <Button size="sm" variant="ghost" onClick={() => copy(address, "Endereço")}>
-              <Copy className="h-4 w-4" /> Copiar
-            </Button>
+            <h2 className="font-medium flex items-center gap-2">
+              {order.delivery_type === "pickup" ? (
+                <><StoreIcon className="h-4 w-4" /> Retirada na loja</>
+              ) : (
+                <><Truck className="h-4 w-4" /> Entrega</>
+              )}
+            </h2>
+            {order.delivery_type === "delivery" && (
+              <Button size="sm" variant="ghost" onClick={() => copy(address, "Endereço")}>
+                <Copy className="h-4 w-4" /> Copiar
+              </Button>
+            )}
           </div>
-          <p className="text-sm">{address}</p>
+          {order.delivery_type === "delivery" ? (
+            <>
+              <p className="text-sm flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <span>{address}</span>
+              </p>
+              {order.shipping_region_name && (
+                <div className="text-xs text-muted-foreground">
+                  Região: <span className="font-medium text-foreground">{order.shipping_region_name}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              O cliente irá retirar o pedido diretamente na loja.
+            </p>
+          )}
           {note && (
             <div className="rounded-md bg-muted/50 p-3 text-sm">
               <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Observações</div>
@@ -170,9 +194,25 @@ export default function AdminOrderDetail() {
             );
           })}
         </div>
-        <div className="p-4 flex items-center justify-between border-t border-border bg-muted/30">
-          <span className="font-medium">Total</span>
-          <span className="font-serif text-xl">{formatBRL(order.total_cents)}</span>
+        <div className="p-4 space-y-1.5 border-t border-border bg-muted/30">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="tabular-nums">{formatBRL(order.subtotal_cents)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">
+              Frete{order.shipping_region_name ? ` · ${order.shipping_region_name}` : order.delivery_type === "pickup" ? " · Retirada" : ""}
+            </span>
+            <span className="tabular-nums">
+              {order.delivery_type === "pickup" || order.shipping_fee_cents === 0
+                ? "—"
+                : formatBRL(order.shipping_fee_cents)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center pt-2 border-t border-border">
+            <span className="font-medium">Total</span>
+            <span className="font-serif text-xl">{formatBRL(order.total_cents)}</span>
+          </div>
         </div>
       </section>
     </div>

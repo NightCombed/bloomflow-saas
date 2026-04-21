@@ -50,13 +50,13 @@ const iso = (daysAgo: number, h = 10, m = 0) => {
 };
 
 export const orders: Order[] = [
-  { id: "o1", store_id: "st_1", customer_id: "cu1", status: "preparing", total_cents: 18900, created_at: iso(0, 9, 15) },
-  { id: "o2", store_id: "st_1", customer_id: "cu2", status: "delivered", total_cents: 33400, created_at: iso(1, 14, 20) },
-  { id: "o3", store_id: "st_1", customer_id: "cu1", status: "pending", total_cents: 14500, created_at: iso(0, 11, 5) },
-  { id: "o4", store_id: "st_1", customer_id: "cu2", status: "out_for_delivery", total_cents: 22900, created_at: iso(0, 8, 0) },
-  { id: "o5", store_id: "st_1", customer_id: "cu1", status: "delivered", total_cents: 16900, created_at: iso(2, 16, 30) },
-  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "canceled", total_cents: 12900, created_at: iso(3, 10, 0) },
-  { id: "o7", store_id: "st_1", customer_id: "cu1", status: "delivered", total_cents: 37800, created_at: iso(5, 13, 0) },
+  { id: "o1", store_id: "st_1", customer_id: "cu1", status: "preparing", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 18900, total_cents: 20400, created_at: iso(0, 9, 15) },
+  { id: "o2", store_id: "st_1", customer_id: "cu2", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr2", shipping_region_name: "Zona Sul SP", shipping_fee_cents: 2500, subtotal_cents: 33400, total_cents: 35900, created_at: iso(1, 14, 20) },
+  { id: "o3", store_id: "st_1", customer_id: "cu1", status: "pending", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 14500, total_cents: 14500, created_at: iso(0, 11, 5) },
+  { id: "o4", store_id: "st_1", customer_id: "cu2", status: "out_for_delivery", delivery_type: "delivery", shipping_region_id: "sr2", shipping_region_name: "Zona Sul SP", shipping_fee_cents: 2500, subtotal_cents: 22900, total_cents: 25400, created_at: iso(0, 8, 0) },
+  { id: "o5", store_id: "st_1", customer_id: "cu1", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 16900, total_cents: 18400, created_at: iso(2, 16, 30) },
+  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "canceled", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 12900, total_cents: 12900, created_at: iso(3, 10, 0) },
+  { id: "o7", store_id: "st_1", customer_id: "cu1", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 37800, total_cents: 39300, created_at: iso(5, 13, 0) },
 ];
 
 export const orderItems: OrderItem[] = [
@@ -81,16 +81,16 @@ export const orderNotes: Record<string, string> = {
 export const orderAddresses: Record<string, string> = {
   o1: "Rua das Acácias, 120 — Apto 32 — Pinheiros, São Paulo",
   o2: "Av. Paulista, 1000 — Bela Vista, São Paulo",
-  o3: "Rua Augusta, 500 — Consolação, São Paulo",
   o4: "Rua Oscar Freire, 200 — Jardins, São Paulo",
   o5: "Av. Faria Lima, 1500 — Itaim, São Paulo",
-  o6: "Rua Haddock Lobo, 300 — Cerqueira César, São Paulo",
   o7: "Rua Teodoro Sampaio, 800 — Pinheiros, São Paulo",
 };
 
 export const shippingRules: ShippingRule[] = [
-  { id: "sr1", store_id: "st_1", name: "Centro SP", region: "0101", price_cents: 1500, eta_hours: 3, active: true },
-  { id: "sr2", store_id: "st_1", name: "Zona Sul SP", region: "0470", price_cents: 2500, eta_hours: 5, active: true },
+  { id: "sr1", store_id: "st_1", name: "Centro", price_cents: 1000, eta_hours: 3, active: true },
+  { id: "sr2", store_id: "st_1", name: "Taquaralto", price_cents: 1500, eta_hours: 4, active: true },
+  { id: "sr3", store_id: "st_1", name: "Plano Diretor", price_cents: 1200, eta_hours: 4, active: true },
+  { id: "sr4", store_id: "st_2", name: "Centro", price_cents: 1500, eta_hours: 3, active: true },
 ];
 
 export const deliveries: Delivery[] = [
@@ -120,6 +120,7 @@ let mockSnapshot = {
   orderAddresses,
   products,
   categories,
+  shippingRules,
 };
 
 const replaceArray = <T,>(target: T[], next: T[] | undefined) => {
@@ -143,6 +144,7 @@ const refreshMockSnapshot = () => {
     orderAddresses,
     products,
     categories,
+    shippingRules,
   };
 };
 
@@ -150,7 +152,7 @@ const persistMockData = () => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
     MOCK_DATA_KEY,
-    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses, products, categories })
+    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses, products, categories, shippingRules })
   );
 };
 
@@ -181,6 +183,7 @@ const hydrateMockData = () => {
     replaceArray(deliveries, parsed.deliveries);
     replaceArray(products, (parsed as any).products);
     replaceArray(categories, (parsed as any).categories);
+    replaceArray(shippingRules, (parsed as any).shippingRules);
     replaceRecord(orderNotes, parsed.orderNotes as typeof orderNotes | undefined);
     replaceRecord(orderAddresses, parsed.orderAddresses as typeof orderAddresses | undefined);
     refreshMockSnapshot();
@@ -301,7 +304,16 @@ export const ORDER_STATUS_FLOW: Order["status"][] = [
 
 export interface CreateOrderInput {
   customer: { name: string; phone: string; email?: string };
-  address: string;
+  delivery_type: "delivery" | "pickup";
+  address?: {
+    street?: string;
+    number?: string;
+    neighborhood?: string;
+    complement?: string;
+  };
+  shipping_region_id?: string | null;
+  shipping_region_name?: string | null;
+  shipping_fee_cents?: number;
   scheduled_for?: string | null;
   notes?: string;
   items: { product_id: string; quantity: number; unit_price_cents: number }[];
@@ -310,8 +322,15 @@ export interface CreateOrderInput {
 const genId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+const formatAddress = (a?: CreateOrderInput["address"]) => {
+  if (!a) return "";
+  const left = [a.street, a.number].filter(Boolean).join(", ");
+  const parts = [left, a.neighborhood, a.complement].filter(Boolean);
+  return parts.join(" — ");
+};
+
 export function createOrder(store_id: string, input: CreateOrderInput): Order {
-  console.log("[mockData] createOrder:store", { store_id, items: input.items.length });
+  console.log("[mockData] createOrder:store", { store_id, delivery_type: input.delivery_type, items: input.items.length });
   const customer: Customer = {
     id: genId("cu"),
     store_id,
@@ -322,13 +341,21 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
   };
   customers.push(customer);
 
-  const total_cents = input.items.reduce((n, i) => n + i.quantity * i.unit_price_cents, 0);
+  const subtotal_cents = input.items.reduce((n, i) => n + i.quantity * i.unit_price_cents, 0);
+  const shipping_fee_cents = input.delivery_type === "delivery" ? (input.shipping_fee_cents ?? 0) : 0;
+  const total_cents = subtotal_cents + shipping_fee_cents;
+  const fullAddress = input.delivery_type === "delivery" ? formatAddress(input.address) : "";
 
   const order: Order = {
     id: genId("o"),
     store_id,
     customer_id: customer.id,
     status: "pending",
+    delivery_type: input.delivery_type,
+    shipping_region_id: input.delivery_type === "delivery" ? input.shipping_region_id ?? null : null,
+    shipping_region_name: input.delivery_type === "delivery" ? input.shipping_region_name ?? null : null,
+    shipping_fee_cents,
+    subtotal_cents,
     total_cents,
     created_at: new Date().toISOString(),
   };
@@ -345,26 +372,24 @@ export function createOrder(store_id: string, input: CreateOrderInput): Order {
     });
   }
 
-  // Persist address & notes in the same maps the admin panel reads from.
-  if (input.address) orderAddresses[order.id] = input.address;
+  if (fullAddress) orderAddresses[order.id] = fullAddress;
   if (input.notes && input.notes.trim()) orderNotes[order.id] = input.notes.trim();
 
-  if (input.scheduled_for || input.address) {
+  if (input.delivery_type === "delivery" && fullAddress) {
     deliveries.push({
       id: genId("d"),
       store_id,
       order_id: order.id,
       recipient_name: customer.name,
-      address: input.address,
+      address: fullAddress,
       scheduled_for: input.scheduled_for ?? new Date().toISOString(),
       status: "scheduled",
     });
   }
 
   console.log("[mockData] pedido criado", {
-    store_id,
-    order,
-    totalOrdersForStore: orders.filter((item) => item.store_id === store_id).length,
+    store_id, order_id: order.id, delivery_type: order.delivery_type,
+    subtotal_cents, shipping_fee_cents, total_cents,
   });
   emitMockDataChange(`createOrder:${order.id}`);
   return order;
@@ -474,3 +499,50 @@ export function deleteCategory(store_id: string, category_id: string): boolean {
   return true;
 }
 
+
+/* ---------- Shipping rules (regions) mutations ---------- */
+
+export interface ShippingRuleInput {
+  name: string;
+  price_cents: number;
+  active?: boolean;
+}
+
+export function createShippingRule(store_id: string, input: ShippingRuleInput): ShippingRule {
+  const rule: ShippingRule = {
+    id: genId("sr"),
+    store_id,
+    name: input.name.trim(),
+    price_cents: input.price_cents,
+    active: input.active ?? true,
+  };
+  shippingRules.push(rule);
+  emitMockDataChange(`createShippingRule:${rule.id}`);
+  return rule;
+}
+
+export function updateShippingRule(store_id: string, rule_id: string, patch: Partial<ShippingRuleInput>): ShippingRule | null {
+  const r = shippingRules.find((x) => x.store_id === store_id && x.id === rule_id);
+  if (!r) return null;
+  if (patch.name !== undefined) r.name = patch.name.trim();
+  if (patch.price_cents !== undefined) r.price_cents = patch.price_cents;
+  if (patch.active !== undefined) r.active = patch.active;
+  emitMockDataChange(`updateShippingRule:${rule_id}`);
+  return r;
+}
+
+export function deleteShippingRule(store_id: string, rule_id: string): boolean {
+  const idx = shippingRules.findIndex((x) => x.store_id === store_id && x.id === rule_id);
+  if (idx < 0) return false;
+  shippingRules.splice(idx, 1);
+  emitMockDataChange(`deleteShippingRule:${rule_id}`);
+  return true;
+}
+
+export function toggleShippingRuleActive(store_id: string, rule_id: string): ShippingRule | null {
+  const r = shippingRules.find((x) => x.store_id === store_id && x.id === rule_id);
+  if (!r) return null;
+  r.active = !r.active;
+  emitMockDataChange(`toggleShippingRuleActive:${rule_id}`);
+  return r;
+}

@@ -115,6 +115,9 @@ export default function AdminOrders() {
                     <span className={cn("text-xs px-2 py-0.5 rounded-full", STATUS_BADGE[order.status])}>
                       {ORDER_STATUS_LABEL[order.status]}
                     </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      {order.delivery_type === "pickup" ? "Retirada" : "Entrega"}
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 truncate">
                     #{order.id} · {customer?.phone ?? "Sem telefone"} · {new Date(order.created_at).toLocaleString("pt-BR")}
