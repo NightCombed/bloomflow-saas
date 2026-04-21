@@ -239,28 +239,9 @@ export default function PublicCheckout() {
 
   const totalCents = subtotalCents + (shippingPending ? 0 : shippingFeeCents);
 
-  const whatsappHref = useMemo(() => {
-    if (!settings?.whatsapp) return "#";
-    return buildWhatsAppUrl(settings.whatsapp, buildWhatsAppMessage(watched, totalCents));
-    // recompute on field/shipping changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    settings?.whatsapp,
-    watched.name,
-    watched.phone,
-    watched.street,
-    watched.number,
-    watched.neighborhood,
-    watched.complement,
-    watched.delivery_type,
-    watched.immediate,
-    watched.deliveryDate,
-    watched.notes,
-    matchedRule?.id,
-    shippingFeeCents,
-    totalCents,
-    items,
-  ]);
+  const whatsappHref = settings?.whatsapp
+    ? buildWhatsAppUrl(settings.whatsapp, buildWhatsAppMessage(watched, totalCents))
+    : "#";
 
   const handleWhatsApp = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!settings?.whatsapp) {
