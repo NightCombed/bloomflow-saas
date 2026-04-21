@@ -17,8 +17,44 @@ export const stores: Store[] = [
 ];
 
 export const storeSettings: StoreSettings[] = [
-  { store_id: "st_1", display_name: "Rosa Bela", tagline: "Flores artesanais entregues no mesmo dia", brand_color: "145 22% 32%", whatsapp: "+55 11 90000-0000", address: "Rua das Acácias, 120 — São Paulo", currency: "BRL", timezone: "America/Sao_Paulo" },
-  { store_id: "st_2", display_name: "Jardim do Sol", tagline: "Buquês frescos para todas as ocasiões", brand_color: "16 55% 56%", whatsapp: "+55 21 90000-0000", address: "Av. Atlântica, 500 — Rio de Janeiro", currency: "BRL", timezone: "America/Sao_Paulo" },
+  {
+    store_id: "st_1",
+    display_name: "Rosa Bela",
+    tagline: "Flores frescas para todos os momentos. Entregamos com carinho na sua região 🌸",
+    brand_color: "145 22% 32%",
+    secondary_color: "16 55% 56%",
+    whatsapp: "+55 11 90000-0000",
+    address: "Rua das Acácias, 120 — Pinheiros, São Paulo — SP",
+    address_street: "Rua das Acácias",
+    address_number: "120",
+    address_neighborhood: "Pinheiros",
+    address_city: "São Paulo",
+    address_state: "SP",
+    opening_hours: "Segunda a sábado, das 08:00 às 18:00",
+    contact_message_template: "Olá! Gostaria de fazer um pedido pela loja Rosa Bela.",
+    logo_url: null,
+    currency: "BRL",
+    timezone: "America/Sao_Paulo",
+  },
+  {
+    store_id: "st_2",
+    display_name: "Jardim do Sol",
+    tagline: "Buquês frescos para todas as ocasiões",
+    brand_color: "16 55% 56%",
+    secondary_color: "145 22% 32%",
+    whatsapp: "+55 21 90000-0000",
+    address: "Av. Atlântica, 500 — Copacabana, Rio de Janeiro — RJ",
+    address_street: "Av. Atlântica",
+    address_number: "500",
+    address_neighborhood: "Copacabana",
+    address_city: "Rio de Janeiro",
+    address_state: "RJ",
+    opening_hours: "Todos os dias, das 09:00 às 19:00",
+    contact_message_template: "Olá! Gostaria de fazer um pedido pela loja Jardim do Sol.",
+    logo_url: null,
+    currency: "BRL",
+    timezone: "America/Sao_Paulo",
+  },
 ];
 
 export const categories: Category[] = [
@@ -121,6 +157,7 @@ let mockSnapshot = {
   products,
   categories,
   shippingRules,
+  storeSettings,
 };
 
 const replaceArray = <T,>(target: T[], next: T[] | undefined) => {
@@ -145,6 +182,7 @@ const refreshMockSnapshot = () => {
     products,
     categories,
     shippingRules,
+    storeSettings,
   };
 };
 
@@ -152,7 +190,7 @@ const persistMockData = () => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
     MOCK_DATA_KEY,
-    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses, products, categories, shippingRules })
+    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses, products, categories, shippingRules, storeSettings })
   );
 };
 
@@ -184,6 +222,7 @@ const hydrateMockData = () => {
     replaceArray(products, (parsed as any).products);
     replaceArray(categories, (parsed as any).categories);
     replaceArray(shippingRules, (parsed as any).shippingRules);
+    replaceArray(storeSettings, (parsed as any).storeSettings);
     replaceRecord(orderNotes, parsed.orderNotes as typeof orderNotes | undefined);
     replaceRecord(orderAddresses, parsed.orderAddresses as typeof orderAddresses | undefined);
     refreshMockSnapshot();
@@ -545,4 +584,29 @@ export function toggleShippingRuleActive(store_id: string, rule_id: string): Shi
   r.active = !r.active;
   emitMockDataChange(`toggleShippingRuleActive:${rule_id}`);
   return r;
+}
+
+/* ---------- Store settings mutation ---------- */
+
+export type StoreSettingsPatch = Partial<Omit<StoreSettings, "store_id">>;
+
+const composeAddress = (s: StoreSettings) => {
+  const left = [s.address_street, s.address_number].filter(Boolean).join(", ");
+  const cityState = [s.address_city, s.address_state].filter(Boolean).join(" — ");
+  return [left, s.address_neighborhood, cityState].filter(Boolean).join(" — ");
+};
+
+export function updateStoreSettings(store_id: string, patch: StoreSettingsPatch): StoreSettings | null {
+  const s = storeSettings.find((x) => x.store_id === store_id);
+  if (!s) return null;
+  Object.assign(s, patch);
+  // Recompose single-line address from structured fields if any structured field was provided
+  const structuralKeys: (keyof StoreSettings)[] = [
+    "address_street", "address_number", "address_neighborhood", "address_city", "address_state",
+  ];
+  if (structuralKeys.some((k) => k in patch)) {
+    s.address = composeAddress(s);
+  }
+  emitMockDataChange(`updateStoreSettings:${store_id}`);
+  return s;
 }

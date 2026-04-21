@@ -41,14 +41,32 @@ function PublicStoreShell() {
       isActive ? "text-primary font-medium" : "text-foreground"
     );
 
+  // Apply per-store brand colors as scoped CSS variables (HSL "H S% L%")
+  const brandStyle = {
+    ...(settings?.brand_color ? { ["--primary" as any]: settings.brand_color, ["--ring" as any]: settings.brand_color } : {}),
+    ...(settings?.secondary_color ? { ["--accent" as any]: settings.secondary_color } : {}),
+  } as React.CSSProperties;
+
+  const contactMessage =
+    settings?.contact_message_template ??
+    `Olá, ${settings?.display_name ?? store.name}! Gostaria de fazer um pedido.`;
+
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-soft">
+    <div style={brandStyle} className="min-h-screen flex flex-col bg-gradient-soft">
       <header className="border-b border-border/60 bg-background/80 backdrop-blur sticky top-0 z-30">
         <div className="container flex h-16 items-center justify-between gap-3">
           <Link to={`/loja/${store.slug}`} className="flex items-center gap-2 min-w-0">
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground flex-shrink-0">
-              <Flower2 className="h-4 w-4" />
-            </span>
+            {settings?.logo_url ? (
+              <img
+                src={settings.logo_url}
+                alt={settings.display_name ?? store.name}
+                className="h-9 w-9 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground flex-shrink-0">
+                <Flower2 className="h-4 w-4" />
+              </span>
+            )}
             <span className="font-serif text-xl font-semibold truncate">
               {settings?.display_name ?? store.name}
             </span>
@@ -121,9 +139,12 @@ function PublicStoreShell() {
             <div className="font-medium mb-2">Contato</div>
             {settings?.whatsapp && <p className="text-muted-foreground">{settings.whatsapp}</p>}
             {settings?.address && <p className="text-muted-foreground">{settings.address}</p>}
+            {settings?.opening_hours && (
+              <p className="text-muted-foreground mt-1">{settings.opening_hours}</p>
+            )}
             {settings?.whatsapp && (
               <div className="mt-3">
-                <WhatsAppButton phone={settings.whatsapp} message={`Olá, ${settings.display_name}!`} />
+                <WhatsAppButton phone={settings.whatsapp} message={contactMessage} />
               </div>
             )}
           </div>
@@ -136,7 +157,7 @@ function PublicStoreShell() {
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
       <WhatsAppButton
         phone={settings?.whatsapp}
-        message={`Olá, ${settings?.display_name ?? store.name}! Gostaria de fazer um pedido.`}
+        message={contactMessage}
         variant="floating"
       />
     </div>

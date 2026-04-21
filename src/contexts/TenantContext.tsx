@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { byStore } from "@/lib/mockData";
+import { useMockData } from "@/hooks/useMockData";
 import { resolveTenantSlug } from "@/lib/tenant";
 import type { Store, StoreSettings } from "@/types/database";
 
@@ -22,6 +23,7 @@ interface Props {
 
 export function TenantProvider({ children, fromRoute = false }: Props) {
   const params = useParams<{ slug?: string }>();
+  const snapshot = useMockData();
 
   const value = useMemo<TenantContextValue>(() => {
     const slug = (fromRoute && params.slug) || resolveTenantSlug();
@@ -29,7 +31,8 @@ export function TenantProvider({ children, fromRoute = false }: Props) {
     const store = byStore.store(slug);
     const settings = store ? byStore.settings(store.id) : null;
     return { store, settings, slug };
-  }, [fromRoute, params.slug]);
+    // re-evaluate when mock store updates (settings edited in admin)
+  }, [fromRoute, params.slug, snapshot.version]);
 
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;
 }
