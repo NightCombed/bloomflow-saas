@@ -120,6 +120,7 @@ let mockSnapshot = {
   orderAddresses,
   products,
   categories,
+  shippingRules,
 };
 
 const replaceArray = <T,>(target: T[], next: T[] | undefined) => {
@@ -143,6 +144,7 @@ const refreshMockSnapshot = () => {
     orderAddresses,
     products,
     categories,
+    shippingRules,
   };
 };
 
@@ -150,7 +152,7 @@ const persistMockData = () => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
     MOCK_DATA_KEY,
-    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses, products, categories })
+    JSON.stringify({ orders, orderItems, customers, deliveries, orderNotes, orderAddresses, products, categories, shippingRules })
   );
 };
 
@@ -181,6 +183,7 @@ const hydrateMockData = () => {
     replaceArray(deliveries, parsed.deliveries);
     replaceArray(products, (parsed as any).products);
     replaceArray(categories, (parsed as any).categories);
+    replaceArray(shippingRules, (parsed as any).shippingRules);
     replaceRecord(orderNotes, parsed.orderNotes as typeof orderNotes | undefined);
     replaceRecord(orderAddresses, parsed.orderAddresses as typeof orderAddresses | undefined);
     refreshMockSnapshot();
