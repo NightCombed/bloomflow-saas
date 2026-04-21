@@ -17,8 +17,44 @@ export const stores: Store[] = [
 ];
 
 export const storeSettings: StoreSettings[] = [
-  { store_id: "st_1", display_name: "Rosa Bela", tagline: "Flores artesanais entregues no mesmo dia", brand_color: "145 22% 32%", whatsapp: "+55 11 90000-0000", address: "Rua das Acácias, 120 — São Paulo", currency: "BRL", timezone: "America/Sao_Paulo" },
-  { store_id: "st_2", display_name: "Jardim do Sol", tagline: "Buquês frescos para todas as ocasiões", brand_color: "16 55% 56%", whatsapp: "+55 21 90000-0000", address: "Av. Atlântica, 500 — Rio de Janeiro", currency: "BRL", timezone: "America/Sao_Paulo" },
+  {
+    store_id: "st_1",
+    display_name: "Rosa Bela",
+    tagline: "Flores frescas para todos os momentos. Entregamos com carinho na sua região 🌸",
+    brand_color: "145 22% 32%",
+    secondary_color: "16 55% 56%",
+    whatsapp: "+55 11 90000-0000",
+    address: "Rua das Acácias, 120 — Pinheiros, São Paulo — SP",
+    address_street: "Rua das Acácias",
+    address_number: "120",
+    address_neighborhood: "Pinheiros",
+    address_city: "São Paulo",
+    address_state: "SP",
+    opening_hours: "Segunda a sábado, das 08:00 às 18:00",
+    contact_message_template: "Olá! Gostaria de fazer um pedido pela loja Rosa Bela.",
+    logo_url: null,
+    currency: "BRL",
+    timezone: "America/Sao_Paulo",
+  },
+  {
+    store_id: "st_2",
+    display_name: "Jardim do Sol",
+    tagline: "Buquês frescos para todas as ocasiões",
+    brand_color: "16 55% 56%",
+    secondary_color: "145 22% 32%",
+    whatsapp: "+55 21 90000-0000",
+    address: "Av. Atlântica, 500 — Copacabana, Rio de Janeiro — RJ",
+    address_street: "Av. Atlântica",
+    address_number: "500",
+    address_neighborhood: "Copacabana",
+    address_city: "Rio de Janeiro",
+    address_state: "RJ",
+    opening_hours: "Todos os dias, das 09:00 às 19:00",
+    contact_message_template: "Olá! Gostaria de fazer um pedido pela loja Jardim do Sol.",
+    logo_url: null,
+    currency: "BRL",
+    timezone: "America/Sao_Paulo",
+  },
 ];
 
 export const categories: Category[] = [
