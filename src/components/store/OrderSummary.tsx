@@ -53,7 +53,7 @@ export function OrderSummary({ shippingFeeCents = 0, shippingLabel, shippingPend
             {shippingPending
               ? <span className="text-muted-foreground">A calcular</span>
               : shippingFeeCents === 0
-                ? <span className="text-emerald-600 dark:text-emerald-400">Grátis</span>
+                ? <span className="text-primary font-medium">Grátis</span>
                 : formatBRL(shippingFeeCents)}
           </dd>
         </div>
