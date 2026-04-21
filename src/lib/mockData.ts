@@ -50,13 +50,13 @@ const iso = (daysAgo: number, h = 10, m = 0) => {
 };
 
 export const orders: Order[] = [
-  { id: "o1", store_id: "st_1", customer_id: "cu1", status: "preparing", total_cents: 18900, created_at: iso(0, 9, 15) },
-  { id: "o2", store_id: "st_1", customer_id: "cu2", status: "delivered", total_cents: 33400, created_at: iso(1, 14, 20) },
-  { id: "o3", store_id: "st_1", customer_id: "cu1", status: "pending", total_cents: 14500, created_at: iso(0, 11, 5) },
-  { id: "o4", store_id: "st_1", customer_id: "cu2", status: "out_for_delivery", total_cents: 22900, created_at: iso(0, 8, 0) },
-  { id: "o5", store_id: "st_1", customer_id: "cu1", status: "delivered", total_cents: 16900, created_at: iso(2, 16, 30) },
-  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "canceled", total_cents: 12900, created_at: iso(3, 10, 0) },
-  { id: "o7", store_id: "st_1", customer_id: "cu1", status: "delivered", total_cents: 37800, created_at: iso(5, 13, 0) },
+  { id: "o1", store_id: "st_1", customer_id: "cu1", status: "preparing", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 18900, total_cents: 20400, created_at: iso(0, 9, 15) },
+  { id: "o2", store_id: "st_1", customer_id: "cu2", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr2", shipping_region_name: "Zona Sul SP", shipping_fee_cents: 2500, subtotal_cents: 33400, total_cents: 35900, created_at: iso(1, 14, 20) },
+  { id: "o3", store_id: "st_1", customer_id: "cu1", status: "pending", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 14500, total_cents: 14500, created_at: iso(0, 11, 5) },
+  { id: "o4", store_id: "st_1", customer_id: "cu2", status: "out_for_delivery", delivery_type: "delivery", shipping_region_id: "sr2", shipping_region_name: "Zona Sul SP", shipping_fee_cents: 2500, subtotal_cents: 22900, total_cents: 25400, created_at: iso(0, 8, 0) },
+  { id: "o5", store_id: "st_1", customer_id: "cu1", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 16900, total_cents: 18400, created_at: iso(2, 16, 30) },
+  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "canceled", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 12900, total_cents: 12900, created_at: iso(3, 10, 0) },
+  { id: "o7", store_id: "st_1", customer_id: "cu1", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 37800, total_cents: 39300, created_at: iso(5, 13, 0) },
 ];
 
 export const orderItems: OrderItem[] = [
@@ -81,16 +81,16 @@ export const orderNotes: Record<string, string> = {
 export const orderAddresses: Record<string, string> = {
   o1: "Rua das Acácias, 120 — Apto 32 — Pinheiros, São Paulo",
   o2: "Av. Paulista, 1000 — Bela Vista, São Paulo",
-  o3: "Rua Augusta, 500 — Consolação, São Paulo",
   o4: "Rua Oscar Freire, 200 — Jardins, São Paulo",
   o5: "Av. Faria Lima, 1500 — Itaim, São Paulo",
-  o6: "Rua Haddock Lobo, 300 — Cerqueira César, São Paulo",
   o7: "Rua Teodoro Sampaio, 800 — Pinheiros, São Paulo",
 };
 
 export const shippingRules: ShippingRule[] = [
-  { id: "sr1", store_id: "st_1", name: "Centro SP", region: "0101", price_cents: 1500, eta_hours: 3, active: true },
-  { id: "sr2", store_id: "st_1", name: "Zona Sul SP", region: "0470", price_cents: 2500, eta_hours: 5, active: true },
+  { id: "sr1", store_id: "st_1", name: "Centro", price_cents: 1000, eta_hours: 3, active: true },
+  { id: "sr2", store_id: "st_1", name: "Taquaralto", price_cents: 1500, eta_hours: 4, active: true },
+  { id: "sr3", store_id: "st_1", name: "Plano Diretor", price_cents: 1200, eta_hours: 4, active: true },
+  { id: "sr4", store_id: "st_2", name: "Centro", price_cents: 1500, eta_hours: 3, active: true },
 ];
 
 export const deliveries: Delivery[] = [
