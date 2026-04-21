@@ -27,6 +27,7 @@ import AdminOrderDetail from "@/pages/admin/AdminOrderDetail";
 import AdminProducts from "@/pages/admin/AdminProducts";
 import AdminCategories from "@/pages/admin/AdminCategories";
 import AdminShipping from "@/pages/admin/AdminShipping";
+import AdminSettings from "@/pages/admin/AdminSettings";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 
 import SuperAdminLayout from "@/components/layouts/SuperAdminLayout";
@@ -80,7 +81,7 @@ const App = () => (
               <Route path="pedidos/:orderId" element={<AdminOrderDetail />} />
               <Route path="clientes" element={<PlaceholderPage title="Clientes" />} />
               <Route path="entregas" element={<AdminShipping />} />
-              <Route path="configuracoes" element={<PlaceholderPage title="Configurações" description="Identidade visual, contato e domínio." />} />
+              <Route path="configuracoes" element={<AdminSettings />} />
             </Route>
 
             {/* Platform super admin */}
