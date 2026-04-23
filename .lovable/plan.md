@@ -1,47 +1,82 @@
 
+## Diagnóstico confirmado
 
-# Corrigir hidratação de memberships após login
+A query do frontend está sendo chamada com o usuário já autenticado.
 
-## Causa raiz
+Evidências observadas no request para `store_members`:
+- filtro enviado: `user_id=eq.56ef4a2c-3c56-4fe1-9c83-8eaadd701d08`
+- header `Authorization: Bearer ...`
+- o JWT tem `sub = 56ef4a2c-3c56-4fe1-9c83-8eaadd701d08`
+- portanto, a hidratação não está rodando “cedo demais”; ela já roda com sessão válida
 
-A policy `SELECT` da tabela `store_members` usa `is_store_member(store_id)`, que por sua vez faz `SELECT FROM store_members`. Isso cria uma dependência circular: para ler a própria linha de membership, o usuário precisaria já ser reconhecido como membro pela mesma policy que está tentando avaliar. Resultado: a query do frontend retorna `[]` mesmo com a linha existindo (confirmado via service role: a linha do usuário `56ef4a2c…` na loja `floricultura-das-flores` existe).
+## O que está falhando de fato
 
-O código do `AuthContext` está correto — listener primeiro, `setTimeout(0)` para evitar deadlock, embed `store:stores(...)`. O problema é exclusivamente RLS.
+O resultado da query não está chegando ao frontend porque o Supabase está respondendo `403 permission denied for table store_members`.
 
-## Correção (1 migration SQL)
+Também há `403 permission denied for table profiles` na outra parte da hidratação.
 
-Substituir a policy de `SELECT` em `store_members` por uma regra direta, sem chamar `is_store_member`:
+Isso mostra que o problema atual não é:
+- ausência da linha em `store_members`
+- `auth.uid()` nulo no momento da chamada
+- falha no join com `stores`
 
-```sql
-drop policy "store_members: membros da loja podem ver" on public.store_members;
+O problema é de acesso SQL à tabela exposta via PostgREST:
+- a policy RLS existe
+- mas o papel `authenticated` não está conseguindo ler `store_members` e `profiles`
 
--- O usuário sempre vê as próprias linhas de membership (necessário para hidratar a sessão).
-create policy "store_members: usuário vê os próprios"
-on public.store_members
-for select
-to authenticated
-using (user_id = auth.uid());
+## Por que a loja ativa não é populada
 
--- Membros da mesma loja podem ver os colegas (sem recursão: usa a policy acima
--- para resolver is_store_member em outra avaliação de query).
-create policy "store_members: membros da mesma loja"
-on public.store_members
-for select
-to authenticated
-using (is_store_member(store_id));
+Hoje o `AuthContext` faz isso:
+
+```ts
+const [profileRes, membersRes] = await Promise.all([...]);
+const rows = (membersRes.data ?? []);
+setMemberships(rows ...);
 ```
 
-A segunda policy mantém o comportamento original para listar colegas de loja; a primeira quebra o ciclo permitindo que o usuário enxergue ao menos a própria linha — que é o que `AuthContext.hydrate()` precisa.
+Como o request volta com erro:
+- `membersRes.data` vem `null`
+- o código converte isso silenciosamente para `[]`
+- `setMemberships([])` é executado
+- `useActiveStore()` retorna `null`
+- o painel mostra “Você ainda não está vinculado a nenhuma loja.”
 
-Policies são OR, então as duas coexistem sem conflito.
+Ou seja: o estado não é populado não porque a linha não exista, mas porque a consulta falha e o erro está sendo engolido.
 
-## Verificação após aplicar
+## O que ajustar
 
-1. Logout + login com `floriculturadasflores@teste.com`.
-2. `AdminDashboard` deve carregar com a loja "Floricultura das Flores" no header em vez da mensagem "não está vinculado".
-3. `useActiveStore()` retorna `{ slug: "floricultura-das-flores", … }`.
+### 1) Corrigir privilégios SQL das tabelas usadas na hidratação
+Aplicar migration para conceder leitura ao papel autenticado nas tabelas necessárias:
 
-## Não muda
+```sql
+grant select on table public.profiles to authenticated;
+grant select on table public.store_members to authenticated;
+```
 
-`AuthContext.tsx`, `useActiveStore.ts`, `AdminLayout.tsx`, função `is_store_member`, demais policies, schema das tabelas. Apenas a policy de SELECT em `store_members`.
+As policies RLS continuam sendo o filtro real de quais linhas cada usuário pode ver.
 
+### 2) Melhorar o `AuthContext` para não mascarar erro como “sem loja”
+Ajustar a hidratação para:
+- checar `profileRes.error` e `membersRes.error`
+- registrar/logar erro de hidratação
+- não transformar erro de permissão em estado vazio silencioso
+- opcionalmente expor um `authError` ou fallback visual do tipo “erro ao carregar vínculo da loja”
+
+## Arquivos envolvidos
+
+- `src/contexts/AuthContext.tsx`
+- `src/hooks/useActiveStore.ts`
+- `supabase/migrations/...sql`
+
+## Resultado esperado após a correção
+
+1. Login continua criando/restaurando sessão normalmente.
+2. A query `store_members` continua sendo chamada com o JWT do usuário autenticado.
+3. O backend passa a responder com os dados, não com `403`.
+4. `memberships` deixa de ser `[]`.
+5. `useActiveStore()` retorna a loja `floricultura-das-flores`.
+6. O header e o dashboard passam a mostrar a loja ativa.
+
+## Detalhe técnico importante
+
+Neste momento, o frontend não mantém um `store_id ativo` separado na sessão; a loja ativa é derivada de `memberships[0]`. Então, corrigindo a leitura de `store_members`, o estado atual já volta a funcionar sem precisar introduzir uma nova estrutura de sessão.
