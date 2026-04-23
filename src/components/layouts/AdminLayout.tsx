@@ -35,7 +35,7 @@ export default function AdminLayout() {
               </Button>
             )}
             <div className="hidden sm:block text-sm text-muted-foreground">{user?.full_name}</div>
-            <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sair">
+            <Button variant="ghost" size="icon" onClick={() => void signOut()} aria-label="Sair">
               <LogOut className="h-4 w-4" />
             </Button>
           </header>
