@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { byStore } from "@/lib/mockData";
-import { useMockData } from "@/hooks/useMockData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { resolveTenantSlug } from "@/lib/tenant";
 import type { Store, StoreSettings } from "@/types/database";
 
@@ -9,37 +9,65 @@ interface TenantContextValue {
   store: Store | null;
   settings: StoreSettings | null;
   slug: string | null;
+  isLoading: boolean;
 }
 
 const TenantContext = createContext<TenantContextValue>({
-  store: null, settings: null, slug: null,
+  store: null, settings: null, slug: null, isLoading: false,
 });
 
 interface Props {
   children: ReactNode;
-  /** When true, prefers the :slug route param (used by /loja/:slug). */
   fromRoute?: boolean;
 }
 
 export function TenantProvider({ children, fromRoute = false }: Props) {
   const params = useParams<{ slug?: string }>();
-  const snapshot = useMockData();
+  const slug = (fromRoute && params.slug) || resolveTenantSlug() || null;
 
-  const value = useMemo<TenantContextValue>(() => {
-    const slug = (fromRoute && params.slug) || resolveTenantSlug();
-    if (!slug) return { store: null, settings: null, slug: null };
-    const store = byStore.store(slug);
-    const settings = store ? byStore.settings(store.id) : null;
-    return { store, settings, slug };
-    // re-evaluate when mock store updates (settings edited in admin)
-  }, [fromRoute, params.slug, snapshot.version]);
+  const { data: store = null, isLoading: loadingStore } = useQuery<Store | null>({
+    queryKey: ["store", slug],
+    queryFn: async () => {
+      if (!slug) return null;
+      const { data, error } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("slug", slug)
+        .eq("status", "active")
+        .maybeSingle();
+      if (error) throw error;
+      return data as unknown as Store | null;
+    },
+    enabled: !!slug,
+  });
+
+  const { data: settings = null, isLoading: loadingSettings } = useQuery<StoreSettings | null>({
+    queryKey: ["store-settings", store?.id],
+    queryFn: async () => {
+      if (!store?.id) return null;
+      const { data, error } = await supabase
+        .from("store_settings")
+        .select("*")
+        .eq("store_id", store.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as unknown as StoreSettings | null;
+    },
+    enabled: !!store?.id,
+  });
+
+  const value = useMemo<TenantContextValue>(() => ({
+    store,
+    settings,
+    slug,
+    isLoading: loadingStore || loadingSettings,
+  }), [store, settings, slug, loadingStore, loadingSettings]);
 
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;
 }
 
 export const useTenant = () => useContext(TenantContext);
 
-/** Throws if no tenant — use inside store-scoped pages. */
 export function useRequiredTenant() {
   const t = useTenant();
   if (!t.store) {

@@ -11,9 +11,17 @@ import { WhatsAppButton } from "@/components/store/WhatsAppButton";
 import { cn } from "@/lib/utils";
 
 function PublicStoreShell() {
-  const { store, settings } = useTenant();
+  const { store, settings, isLoading } = useTenant();
   const [cartOpen, setCartOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <Flower2 className="mx-auto h-10 w-10 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   if (!store) {
     return (
