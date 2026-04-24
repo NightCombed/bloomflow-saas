@@ -25,7 +25,7 @@ export function TenantProvider({ children, fromRoute = false }: Props) {
   const params = useParams<{ slug?: string }>();
   const slug = (fromRoute && params.slug) || resolveTenantSlug() || null;
 
-  const { data: store = null, isLoading: loadingStore } = useQuery({
+  const { data: store = null, isLoading: loadingStore } = useQuery<Store | null>({
     queryKey: ["store", slug],
     queryFn: async () => {
       if (!slug) return null;
@@ -36,12 +36,12 @@ export function TenantProvider({ children, fromRoute = false }: Props) {
         .eq("status", "active")
         .maybeSingle();
       if (error) throw error;
-      return data as Store | null;
+      return data as unknown as Store | null;
     },
     enabled: !!slug,
   });
 
-  const { data: settings = null, isLoading: loadingSettings } = useQuery({
+  const { data: settings = null, isLoading: loadingSettings } = useQuery<StoreSettings | null>({
     queryKey: ["store-settings", store?.id],
     queryFn: async () => {
       if (!store?.id) return null;
@@ -51,7 +51,7 @@ export function TenantProvider({ children, fromRoute = false }: Props) {
         .eq("store_id", store.id)
         .maybeSingle();
       if (error) throw error;
-      return data as StoreSettings | null;
+      return data as unknown as StoreSettings | null;
     },
     enabled: !!store?.id,
   });
