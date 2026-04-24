@@ -4,10 +4,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Save, Flower2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useActiveStore } from "@/hooks/useActiveStore";
 import { useMockData } from "@/hooks/useMockData";
 import { byStore, updateStoreSettings } from "@/lib/mockData";
+import { supabase } from "@/integrations/supabase/client";
+
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,10 +42,39 @@ export default function AdminSettings() {
   const snapshot = useMockData();
   const [saving, setSaving] = useState(false);
 
-  const settings = useMemo(
-    () => (store ? byStore.settings(store.id) : null),
-    [store, snapshot.version],
-  );
+  const { data: settings = null } = useQuery({
+    queryKey: ["store-settings", store?.id],
+    queryFn: async () => {
+      if (!store?.id) return null;
+      const { data, error } = await supabase
+        .from("store_settings")
+        .select("*")
+        .eq("store_id", store.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        store_id: data.store_id,
+        display_name: data.store_name,
+        tagline: data.message,
+        logo_url: data.logo_url,
+        brand_color: data.primary_color || "145 22% 32%",
+        secondary_color: data.secondary_color || "16 55% 56%",
+        whatsapp: data.whatsapp_number,
+        address_street: data.address_street,
+        address_number: data.address_number,
+        address_neighborhood: data.address_neighborhood,
+        address_city: data.address_city,
+        address_state: data.address_state,
+        opening_hours: data.opening_hours,
+        contact_message_template: data.contact_message_template,
+        currency: "BRL",
+        timezone: "America/Sao_Paulo",
+      } as StoreSettings;
+    },
+    enabled: !!store?.id,
+  });
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -93,26 +125,36 @@ export default function AdminSettings() {
     );
   }
 
-  const onSubmit = (values: Values) => {
+  const onSubmit = async (values: Values) => {
+    if (!store) return;
     setSaving(true);
     try {
-      updateStoreSettings(store.id, {
-        display_name: values.display_name,
-        tagline: values.tagline || undefined,
-        whatsapp: values.whatsapp || undefined,
-        address_street: values.address_street || undefined,
-        address_number: values.address_number || undefined,
-        address_neighborhood: values.address_neighborhood || undefined,
-        address_city: values.address_city || undefined,
-        address_state: values.address_state || undefined,
-        opening_hours: values.opening_hours || undefined,
-        brand_color: values.brand_color,
-        secondary_color: values.secondary_color || undefined,
-        logo_url: values.logo_url || null,
-        contact_message_template: values.contact_message_template || undefined,
-      });
+      const { error } = await supabase
+        .from("store_settings")
+        .update({
+          store_name: values.display_name,
+          message: values.tagline || null,
+          whatsapp_number: values.whatsapp || null,
+          address_street: values.address_street || null,
+          address_number: values.address_number || null,
+          address_neighborhood: values.address_neighborhood || null,
+          address_city: values.address_city || null,
+          address_state: values.address_state || null,
+          opening_hours: values.opening_hours || null,
+          primary_color: values.brand_color,
+          secondary_color: values.secondary_color || null,
+          logo_url: values.logo_url || null,
+          contact_message_template: values.contact_message_template || null,
+        })
+        .eq("store_id", store.id);
+      if (error) throw error;
       toast.success("Configurações salvas", {
         description: "As alterações já estão visíveis na loja.",
+      });
+    } catch (error) {
+      console.error("Erro ao salvar configurações:", error);
+      toast.error("Erro ao salvar", {
+        description: "Tente novamente em alguns instantes.",
       });
     } finally {
       setSaving(false);
