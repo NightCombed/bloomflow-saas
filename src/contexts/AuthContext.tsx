@@ -85,6 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("user_id", authUser.id),
     ]);
 
+    if (profileRes.error) {
+      console.error("[AuthContext] failed to load profile", profileRes.error);
+    }
+    if (membersRes.error) {
+      console.error("[AuthContext] failed to load store memberships", membersRes.error);
+    }
+
     setUser(toPlatformUser(authUser, (profileRes.data as ProfileRow | null) ?? null));
 
     const rows = (membersRes.data ?? []) as Array<{
