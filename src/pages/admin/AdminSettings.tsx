@@ -10,6 +10,7 @@ import { useActiveStore } from "@/hooks/useActiveStore";
 import { useMockData } from "@/hooks/useMockData";
 import { byStore, updateStoreSettings } from "@/lib/mockData";
 import { supabase } from "@/integrations/supabase/client";
+import type { StoreSettings } from "@/types/database";
 
 
 import { Button } from "@/components/ui/button";
