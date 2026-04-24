@@ -1,64 +1,110 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useActiveStore } from "@/hooks/useActiveStore";
-import { useMockData } from "@/hooks/useMockData";
-import { byStore, createCategory, updateCategory, deleteCategory } from "@/lib/mockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import type { Category } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+
+const slugify = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export default function AdminCategories() {
   const store = useActiveStore();
-  const snapshot = useMockData();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Category | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
-  const { categories, products } = useMemo(() => {
-    if (!store) return { categories: [], products: [] };
-    return {
-      categories: byStore.categories(store.id).slice().sort((a, b) => a.position - b.position),
-      products: byStore.products(store.id),
-    };
-  }, [store, snapshot.version]);
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories", store?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("*")
+        .eq("store_id", store!.id)
+        .eq("is_active", true)
+        .order("sort_order");
+      if (error) throw error;
+      return (data ?? []).map((c: any) => ({
+        id: c.id,
+        store_id: c.store_id,
+        name: c.name,
+        slug: c.slug,
+        position: c.sort_order ?? 0,
+      })) as Category[];
+    },
+    enabled: !!store?.id,
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["products", store?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, category_id")
+        .eq("store_id", store!.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!store?.id,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ id, name }: { id?: string; name: string }) => {
+      const maxPos = categories.reduce((m, c) => Math.max(m, c.position ?? 0), 0);
+      if (id) {
+        const { error } = await supabase
+          .from("categories")
+          .update({ name, slug: slugify(name) })
+          .eq("id", id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("categories")
+          .insert({ store_id: store!.id, name, slug: slugify(name), sort_order: maxPos + 1, is_active: true });
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ["categories", store?.id] });
+      toast({ title: id ? "Categoria atualizada" : "Categoria criada" });
+      setFormOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao salvar categoria", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("categories").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories", store?.id] });
+      toast({ title: "Categoria excluída" });
+      setDeleteTarget(null);
+    },
+    onError: () => toast({ title: "Erro ao excluir", variant: "destructive" }),
+  });
 
   if (!store) return null;
 
-  const productCount = (id: string) => products.filter((p) => p.category_id === id).length;
-
+  const productCount = (id: string) => products.filter((p: any) => p.category_id === id).length;
   const openCreate = () => { setEditing(null); setName(""); setFormOpen(true); };
   const openEdit = (c: Category) => { setEditing(c); setName(c.name); setFormOpen(true); };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) {
-      toast({ title: "Nome obrigatório", variant: "destructive" });
-      return;
-    }
-    if (editing) {
-      updateCategory(store.id, editing.id, { name: trimmed });
-      toast({ title: "Categoria atualizada" });
-    } else {
-      createCategory(store.id, { name: trimmed });
-      toast({ title: "Categoria criada" });
-    }
-    setFormOpen(false);
-  };
-
-  const handleDelete = () => {
-    if (!deleteTarget) return;
-    deleteCategory(store.id, deleteTarget.id);
-    toast({ title: "Categoria excluída", description: "Produtos vinculados ficaram sem categoria." });
-    setDeleteTarget(null);
+    if (!trimmed) { toast({ title: "Nome obrigatório", variant: "destructive" }); return; }
+    saveMutation.mutate({ id: editing?.id, name: trimmed });
   };
 
   return (
@@ -73,9 +119,7 @@ export default function AdminCategories() {
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         {categories.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground text-sm">
-            Nenhuma categoria ainda. Crie a primeira!
-          </div>
+          <div className="p-12 text-center text-muted-foreground text-sm">Nenhuma categoria ainda. Crie a primeira!</div>
         ) : (
           <div className="divide-y divide-border">
             {categories.map((c) => (
@@ -86,8 +130,8 @@ export default function AdminCategories() {
                     /{c.slug} · {productCount(c.id)} {productCount(c.id) === 1 ? "produto" : "produtos"}
                   </div>
                 </div>
-                <Button size="icon" variant="ghost" onClick={() => openEdit(c)} aria-label="Editar"><Pencil className="h-4 w-4" /></Button>
-                <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(c)} aria-label="Excluir"><Trash2 className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(c)}><Trash2 className="h-4 w-4" /></Button>
               </div>
             ))}
           </div>
@@ -96,9 +140,7 @@ export default function AdminCategories() {
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar categoria" : "Nova categoria"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Editar categoria" : "Nova categoria"}</DialogTitle></DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cat-name">Nome *</Label>
@@ -106,7 +148,7 @@ export default function AdminCategories() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
-              <Button type="submit">{editing ? "Salvar" : "Criar"}</Button>
+              <Button type="submit" disabled={saveMutation.isPending}>{editing ? "Salvar" : "Criar"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -116,13 +158,11 @@ export default function AdminCategories() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir categoria?</AlertDialogTitle>
-            <AlertDialogDescription>
-              "{deleteTarget?.name}" será removida. Produtos vinculados ficarão sem categoria.
-            </AlertDialogDescription>
+            <AlertDialogDescription>"{deleteTarget?.name}" será removida. Produtos vinculados ficarão sem categoria.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}>Excluir</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
