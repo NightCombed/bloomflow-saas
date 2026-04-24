@@ -51,7 +51,32 @@ export function TenantProvider({ children, fromRoute = false }: Props) {
         .eq("store_id", store.id)
         .maybeSingle();
       if (error) throw error;
-      return data as unknown as StoreSettings | null;
+      if (!data) return null;
+
+      // Mapeia campos do Supabase para StoreSettings
+      return {
+        store_id: data.store_id,
+        display_name: data.store_name,
+        tagline: data.message,
+        logo_url: data.logo_url,
+        brand_color: data.primary_color || "145 22% 32%",
+        secondary_color: data.secondary_color || "16 55% 56%",
+        whatsapp: data.whatsapp_number,
+        address: [
+          [data.address_street, data.address_number].filter(Boolean).join(", "),
+          data.address_neighborhood,
+          [data.address_city, data.address_state].filter(Boolean).join(" — ")
+        ].filter(Boolean).join(" — "),
+        address_street: data.address_street,
+        address_number: data.address_number,
+        address_neighborhood: data.address_neighborhood,
+        address_city: data.address_city,
+        address_state: data.address_state,
+        opening_hours: data.opening_hours,
+        contact_message_template: data.contact_message_template,
+        currency: "BRL",
+        timezone: "America/Sao_Paulo",
+      } as StoreSettings;
     },
     enabled: !!store?.id,
   });
