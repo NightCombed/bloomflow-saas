@@ -1,10 +1,10 @@
-# Scalius Commerce
+# Scalius Vitrine
 
 Sistema SaaS multi-tenant para pedidos online de lojas locais (floriculturas, artesanato, confeitarias, etc).
 
 ## 📋 Sobre o Projeto
 
-Scalius Commerce permite que pequenas lojas criem sua própria loja online para receber pedidos via WhatsApp, com gestão completa de produtos, categorias, regiões de entrega e pedidos.
+Scalius Vitrine permite que pequenas lojas criem sua própria loja online para receber pedidos via WhatsApp, com gestão completa de produtos, categorias, regiões de entrega e pedidos.
 
 ### Funcionalidades Principais
 
@@ -131,8 +131,8 @@ src/
 
 1. **Clone o repositório:**
 ```bash
-git clone https://github.com/NightCombed/scalius-commerce.git
-cd scalius-commerce
+git clone https://github.com/NightCombed/scalius-vitrine.git
+cd scalius-vitrine
 ```
 
 2. **Instale as dependências:**
@@ -257,12 +257,12 @@ Proprietary - Todos os direitos reservados
 
 ## 👤 Autor
 
-**Scalius Commerce**
+**Scalius Vitrine**
 - GitHub: [@NightCombed](https://github.com/NightCombed)
 
 ## 🔗 Links
 
-- [Repositório](https://github.com/NightCombed/scalius-commerce)
+- [Repositório](https://github.com/NightCombed/scalius-vitrine)
 - [Supabase Dashboard](https://supabase.com/dashboard/project/jrmixsvdnejzfxvybmng)
 - [Documentação Supabase](https://supabase.com/docs)
 - [Documentação React](https://react.dev)
