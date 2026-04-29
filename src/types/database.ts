@@ -94,11 +94,10 @@ export interface Customer {
 
 export type OrderStatus =
   | "pending"
-  | "confirmed"
   | "preparing"
   | "out_for_delivery"
   | "delivered"
-  | "canceled";
+  | "cancelled";
 
 export type DeliveryType = "delivery" | "pickup";
 

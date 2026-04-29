@@ -42,6 +42,7 @@ export default function AdminProducts() {
         price_cents: p.price_cents,
         image_url: p.image_url,
         active: p.is_active,
+        featured: p.is_featured ?? false,
         stock: p.stock_qty,
         created_at: p.created_at,
       })) as Product[];
@@ -79,6 +80,21 @@ export default function AdminProducts() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products", store?.id] }),
     onError: () => toast({ title: "Erro ao atualizar produto", variant: "destructive" }),
+  });
+
+  const featuredMutation = useMutation({
+    mutationFn: async ({ id, featured }: { id: string; featured: boolean }) => {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_featured: !featured })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { featured }) => {
+      queryClient.invalidateQueries({ queryKey: ["products", store?.id] });
+      toast({ title: !featured ? "Produto marcado como destaque" : "Produto removido dos destaques" });
+    },
+    onError: () => toast({ title: "Erro ao atualizar destaque", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -159,7 +175,13 @@ export default function AdminProducts() {
                 </div>
                 <div className="font-medium shrink-0 w-24 text-right">{formatBRL(p.price_cents)}</div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Switch checked={p.active} onCheckedChange={() => toggleMutation.mutate({ id: p.id, active: p.active })} />
+                  <div className="flex items-center gap-1.5 mr-2" title="Em destaque">
+                    <span className="text-xs text-muted-foreground hidden sm:flex items-center gap-1">⭐ Destaque</span>
+                    <Switch checked={!!p.featured} onCheckedChange={() => featuredMutation.mutate({ id: p.id, featured: !!p.featured })} />
+                  </div>
+                  <div className="flex items-center gap-1.5" title="Ativo/Inativo">
+                    <Switch checked={p.active} onCheckedChange={() => toggleMutation.mutate({ id: p.id, active: p.active })} />
+                  </div>
                   <Button size="icon" variant="ghost" onClick={() => { setEditing(p); setFormOpen(true); }}><Pencil className="h-4 w-4" /></Button>
                   <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(p)}><Trash2 className="h-4 w-4" /></Button>
                 </div>

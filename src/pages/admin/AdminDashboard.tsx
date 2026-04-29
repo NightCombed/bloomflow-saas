@@ -1,13 +1,72 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useActiveStore } from "@/hooks/useActiveStore";
-import { useMockData } from "@/hooks/useMockData";
-import { byStore, formatBRL, metrics, ORDER_STATUS_LABEL } from "@/lib/mockData";
+import { formatBRL, ORDER_STATUS_LABEL } from "@/lib/mockData";
 import { Clock, Package, ShoppingBag, Truck, CheckCircle2, TrendingUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AdminDashboard() {
   const store = useActiveStore();
-  const snapshot = useMockData();
+
+  const { data: dailyOrders = [] } = useQuery({
+    queryKey: ["admin-dashboard-daily", store?.id],
+    queryFn: async () => {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase
+        .from("orders")
+        .select("status, total_cents")
+        .eq("store_id", store!.id)
+        .gte("created_at", startOfToday.toISOString());
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!store?.id,
+  });
+
+  const { data: recent = [] } = useQuery({
+    queryKey: ["admin-dashboard-recent", store?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_number, customer_name, status, total_cents, created_at")
+        .eq("store_id", store!.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!store?.id,
+  });
+
+  const { data: top = [] } = useQuery({
+    queryKey: ["admin-dashboard-top", store?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("order_items")
+        .select("product_id, product_name, quantity, line_total_cents")
+        .eq("store_id", store!.id);
+      if (error) throw error;
+      
+      const map = new Map<string, { product_id: string; product_name: string; quantity: number; revenue_cents: number }>();
+      data.forEach(item => {
+        const id = item.product_id;
+        if (!map.has(id)) {
+          map.set(id, { product_id: id, product_name: item.product_name, quantity: 0, revenue_cents: 0 });
+        }
+        const prod = map.get(id)!;
+        prod.quantity += item.quantity;
+        prod.revenue_cents += item.line_total_cents;
+      });
+
+      return Array.from(map.values())
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+    },
+    enabled: !!store?.id,
+  });
+
   if (!store) {
     return (
       <div className="rounded-lg border border-border p-8 text-center">
@@ -16,22 +75,16 @@ export default function AdminDashboard() {
     );
   }
 
-  const todayRevenue = metrics.todayRevenueCents(store.id);
-  const todayOrders = metrics.ordersToday(store.id);
-  const pending = metrics.countByStatus(store.id, "pending");
-  const preparing = metrics.countByStatus(store.id, "preparing");
-  const outForDelivery = metrics.countByStatus(store.id, "out_for_delivery");
-  const delivered = metrics.countByStatus(store.id, "delivered");
-  const top = metrics.topProducts(store.id, 5);
-  const recent = [...byStore.orders(store.id)]
-    .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
-    .slice(0, 5);
-  const customers = byStore.customers(store.id);
-  console.log("[AdminDashboard] snapshot", { v: snapshot.version, store_id: store.id, recent: recent.length, total: byStore.orders(store.id).length });
+  const todayRevenue = dailyOrders.reduce((sum, o) => sum + o.total_cents, 0);
+  const todayOrders = dailyOrders.length;
+  const pending = dailyOrders.filter((o) => o.status === "pending").length;
+  const preparing = dailyOrders.filter((o) => o.status === "preparing").length;
+  const outForDelivery = dailyOrders.filter((o) => o.status === "out_for_delivery").length;
+  const delivered = dailyOrders.filter((o) => o.status === "delivered").length;
 
   const kpis = [
     { label: "Vendas hoje", value: formatBRL(todayRevenue), icon: TrendingUp, accent: "text-primary" },
-    { label: "Pedidos hoje", value: todayOrders.length, icon: ShoppingBag, accent: "text-primary" },
+    { label: "Pedidos hoje", value: todayOrders, icon: ShoppingBag, accent: "text-primary" },
     { label: "Pendentes", value: pending, icon: Clock, accent: "text-amber-600" },
     { label: "Em preparação", value: preparing, icon: Package, accent: "text-blue-600" },
     { label: "Saiu p/ entrega", value: outForDelivery, icon: Truck, accent: "text-violet-600" },
@@ -75,7 +128,6 @@ export default function AdminDashboard() {
               <div className="p-8 text-center text-muted-foreground text-sm">Nenhum pedido ainda.</div>
             )}
             {recent.map((o) => {
-              const customer = customers.find((c) => c.id === o.customer_id);
               return (
                 <Link
                   key={o.id}
@@ -83,9 +135,9 @@ export default function AdminDashboard() {
                   className="p-4 flex items-center justify-between hover:bg-muted/40 transition-colors"
                 >
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{customer?.name ?? "Cliente"}</div>
+                    <div className="font-medium truncate">{o.customer_name ?? "Cliente"}</div>
                     <div className="text-xs text-muted-foreground truncate">
-                      #{o.id} · {ORDER_STATUS_LABEL[o.status]} · {new Date(o.created_at).toLocaleString("pt-BR")}
+                      #{o.order_number || o.id.slice(-6).toUpperCase()} · {ORDER_STATUS_LABEL[o.status as keyof typeof ORDER_STATUS_LABEL]} · {new Date(o.created_at).toLocaleString("pt-BR")}
                     </div>
                   </div>
                   <div className="font-medium shrink-0 ml-4">{formatBRL(o.total_cents)}</div>
@@ -106,7 +158,7 @@ export default function AdminDashboard() {
             {top.map((row) => (
               <div key={row.product_id} className="p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-medium truncate">{row.product?.name ?? "Produto"}</div>
+                  <div className="font-medium truncate">{row.product_name ?? "Produto"}</div>
                   <div className="text-xs text-muted-foreground">{row.quantity} vendidos</div>
                 </div>
                 <div className="text-sm font-medium shrink-0">{formatBRL(row.revenue_cents)}</div>

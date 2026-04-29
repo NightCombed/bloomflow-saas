@@ -1,11 +1,9 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useActiveStore } from "@/hooks/useActiveStore";
-import { useMockData } from "@/hooks/useMockData";
-import {
-  byStore, formatBRL,
-  createShippingRule, updateShippingRule, deleteShippingRule, toggleShippingRuleActive,
-} from "@/lib/mockData";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { formatBRL } from "@/lib/mockData";
 import type { ShippingRule } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +22,17 @@ const parseBRL = (s: string) => {
   return Math.round(n * 100);
 };
 
+const slugify = (str: string) =>
+  str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+
 export default function AdminShipping() {
   const store = useActiveStore();
-  const snapshot = useMockData();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ShippingRule | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -34,10 +40,90 @@ export default function AdminShipping() {
   const [active, setActive] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<ShippingRule | null>(null);
 
-  const rules = useMemo(() => {
-    if (!store) return [] as ShippingRule[];
-    return byStore.shippingRules(store.id).slice().sort((a, b) => a.name.localeCompare(b.name));
-  }, [store, snapshot.version]);
+  const { data: rules = [] } = useQuery<ShippingRule[]>({
+    queryKey: ["shipping-regions", store?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shipping_regions")
+        .select("*")
+        .eq("store_id", store!.id)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        store_id: row.store_id,
+        name: row.name,
+        price_cents: row.fee_cents,
+        active: row.is_active,
+      }));
+    },
+    enabled: !!store?.id,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const { error } = await supabase
+        .from("shipping_regions")
+        .update({ is_active: !active })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shipping-regions", store?.id] }),
+    onError: () => toast({ title: "Erro ao atualizar região", variant: "destructive" }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (vars: { name: string; price_cents: number; active: boolean }) => {
+      const { error } = await supabase.from("shipping_regions").insert({
+        store_id: store!.id,
+        name: vars.name,
+        slug: slugify(vars.name),
+        fee_cents: vars.price_cents,
+        is_active: vars.active,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipping-regions", store?.id] });
+      toast({ title: "Região criada" });
+      setFormOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao criar", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (vars: { id: string; name: string; price_cents: number; active: boolean }) => {
+      const { error } = await supabase
+        .from("shipping_regions")
+        .update({
+          name: vars.name,
+          slug: slugify(vars.name),
+          fee_cents: vars.price_cents,
+          is_active: vars.active,
+        })
+        .eq("id", vars.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipping-regions", store?.id] });
+      toast({ title: "Região atualizada" });
+      setFormOpen(false);
+    },
+    onError: () => toast({ title: "Erro ao atualizar", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("shipping_regions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipping-regions", store?.id] });
+      toast({ title: "Região excluída" });
+      setDeleteTarget(null);
+    },
+    onError: () => toast({ title: "Erro ao excluir", variant: "destructive" }),
+  });
 
   if (!store) return null;
 
@@ -61,20 +147,15 @@ export default function AdminShipping() {
     }
     const cents = parseBRL(price);
     if (editing) {
-      updateShippingRule(store.id, editing.id, { name: trimmed, price_cents: cents, active });
-      toast({ title: "Região atualizada" });
+      updateMutation.mutate({ id: editing.id, name: trimmed, price_cents: cents, active });
     } else {
-      createShippingRule(store.id, { name: trimmed, price_cents: cents, active });
-      toast({ title: "Região criada" });
+      createMutation.mutate({ name: trimmed, price_cents: cents, active });
     }
-    setFormOpen(false);
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    deleteShippingRule(store.id, deleteTarget.id);
-    toast({ title: "Região excluída" });
-    setDeleteTarget(null);
+    deleteMutation.mutate(deleteTarget.id);
   };
 
   return (
@@ -105,7 +186,7 @@ export default function AdminShipping() {
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={r.active}
-                    onCheckedChange={() => toggleShippingRuleActive(store.id, r.id)}
+                    onCheckedChange={() => toggleMutation.mutate({ id: r.id, active: r.active })}
                     aria-label="Ativar região"
                   />
                   <span className="text-xs text-muted-foreground w-14">

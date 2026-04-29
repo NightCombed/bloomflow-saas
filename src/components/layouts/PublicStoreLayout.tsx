@@ -40,7 +40,6 @@ function PublicStoreShell() {
 
   const navItems = [
     { to: `/loja/${store.slug}`, label: "Início", end: true },
-    { to: `/loja/${store.slug}/produtos`, label: "Produtos", end: false },
   ];
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>

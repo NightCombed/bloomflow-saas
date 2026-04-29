@@ -1,33 +1,78 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useActiveStore } from "@/hooks/useActiveStore";
-import { useMockData } from "@/hooks/useMockData";
-import {
-  byStore, formatBRL, ORDER_STATUS_LABEL, ORDER_STATUS_FLOW,
-  orderNotes, orderAddresses, products, updateOrderStatus,
-} from "@/lib/mockData";
+import { formatBRL, ORDER_STATUS_LABEL, ORDER_STATUS_FLOW } from "@/lib/mockData";
 import type { Order } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Phone, MapPin, Copy, MessageCircle, Truck, Store as StoreIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const STATUS_BADGE: Record<Order["status"], string> = {
+const STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  confirmed: "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300",
   preparing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   out_for_delivery: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
   delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  cancelled: "bg-muted text-muted-foreground",
+  // Fallbacks para orders antigas
+  confirmed: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   canceled: "bg-muted text-muted-foreground",
 };
 
 export default function AdminOrderDetail() {
   const store = useActiveStore();
   const { orderId = "" } = useParams<{ orderId: string }>();
-  const navigate = useNavigate();
-  useMockData();
+  const queryClient = useQueryClient();
+
+  const { data: order, isLoading } = useQuery({
+    queryKey: ["admin-order", store?.id, orderId],
+    queryFn: async () => {
+      if (!orderId || !store) return null;
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, order_items(*)")
+        .eq("id", orderId)
+        .eq("store_id", store.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orderId && !!store?.id,
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async (status: Order["status"]) => {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status })
+        .eq("id", orderId);
+      if (error) throw error;
+      return status;
+    },
+    onSuccess: (status) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-order", store?.id, orderId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-orders", store?.id] });
+      toast.success(`Status atualizado: ${ORDER_STATUS_LABEL[status as keyof typeof ORDER_STATUS_LABEL]}`);
+    },
+    onError: () => toast.error("Erro ao atualizar status"),
+  });
 
   if (!store) return null;
-  const order = byStore.order(store.id, orderId);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-3xl">
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/admin/pedidos"><ArrowLeft className="h-4 w-4" /> Voltar</Link>
+        </Button>
+        <div className="rounded-xl border border-border p-12 text-center text-muted-foreground mt-6">
+          Carregando pedido...
+        </div>
+      </div>
+    );
+  }
+
   if (!order) {
     return (
       <div className="max-w-3xl">
@@ -41,23 +86,47 @@ export default function AdminOrderDetail() {
     );
   }
 
-  const customer = byStore.customer(store.id, order.customer_id);
-  const items = byStore.orderItems(store.id, order.id);
-  const note = orderNotes[order.id];
-  const address = orderAddresses[order.id] ?? "Sem endereço cadastrado";
+  const items = order.order_items || [];
+  const note = order.notes;
+  const address = order.delivery_type === "pickup"
+    ? "Retirada na loja"
+    : [
+      [order.address_street, order.address_number].filter(Boolean).join(", "),
+      order.address_neighborhood,
+      order.address_complement
+    ].filter(Boolean).join(" — ") || "Sem endereço cadastrado";
 
   const setStatus = (s: Order["status"]) => {
-    updateOrderStatus(store.id, order.id, s);
-    toast.success(`Status atualizado: ${ORDER_STATUS_LABEL[s]}`);
+    updateStatus.mutate(s);
   };
 
-  const copy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copiado`);
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback para contextos sem HTTPS (ex: http://localhost em alguns browsers)
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!ok) throw new Error("execCommand falhou");
+      }
+      toast.success(`${label} copiado`);
+    } catch (err) {
+      console.error("[copyToClipboard] erro:", err);
+      toast.error(`Erro ao copiar ${label.toLowerCase()}`);
+    }
   };
 
-  const whatsappHref = customer?.phone
-    ? `https://wa.me/${customer.phone.replace(/\D/g, "")}`
+  const whatsappHref = order.customer_phone
+    ? `https://wa.me/${order.customer_phone.replace(/\D/g, "")}`
     : null;
 
   return (
@@ -69,9 +138,9 @@ export default function AdminOrderDetail() {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="font-serif text-3xl">Pedido #{order.id}</h1>
+            <h1 className="font-serif text-3xl">Pedido #{order.order_number || order.id.slice(-6).toUpperCase()}</h1>
             <span className={cn("text-xs px-2 py-1 rounded-full", STATUS_BADGE[order.status])}>
-              {ORDER_STATUS_LABEL[order.status]}
+              {order.status === "confirmed" ? "Em preparação" : ORDER_STATUS_LABEL[order.status as keyof typeof ORDER_STATUS_LABEL] || "Cancelado"}
             </span>
           </div>
           <p className="text-muted-foreground text-sm">
@@ -84,25 +153,101 @@ export default function AdminOrderDetail() {
       {/* Status actions */}
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="font-medium mb-3">Atualizar status</h2>
-        <div className="flex flex-wrap gap-2">
-          {ORDER_STATUS_FLOW.map((s) => (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Reversion Buttons */}
+          {(order.status === "preparing" || order.status === "confirmed") && (
             <Button
-              key={s}
               size="sm"
-              variant={order.status === s ? "default" : "outline"}
-              onClick={() => setStatus(s)}
+              variant="outline"
+              onClick={() => setStatus("pending")}
+              disabled={updateStatus.isPending}
             >
-              {ORDER_STATUS_LABEL[s]}
+              ← Voltar para Pendente
             </Button>
-          ))}
-          <Button
-            size="sm"
-            variant={order.status === "canceled" ? "default" : "outline"}
-            onClick={() => setStatus("canceled")}
-            className={order.status === "canceled" ? "" : "text-destructive hover:text-destructive"}
-          >
-            Cancelar
-          </Button>
+          )}
+
+          {order.status === "out_for_delivery" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setStatus("preparing")}
+              disabled={updateStatus.isPending}
+            >
+              ← Voltar para Em Preparação
+            </Button>
+          )}
+
+          {order.status === "delivered" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setStatus(order.delivery_type === "pickup" ? "preparing" : "out_for_delivery")}
+              disabled={updateStatus.isPending}
+            >
+              {order.delivery_type === "pickup" ? "← Voltar para Em Preparação" : "← Voltar para Saiu p/ Entrega"}
+            </Button>
+          )}
+
+          {(order.status === "cancelled" || order.status === "canceled") && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setStatus("pending")}
+              disabled={updateStatus.isPending}
+            >
+              Reabrir pedido
+            </Button>
+          )}
+
+          {/* Separator if both revert and advance options exist */}
+          {(order.status === "preparing" || order.status === "confirmed" || order.status === "out_for_delivery") && (
+            <div className="h-6 w-px bg-border mx-2 hidden sm:block" />
+          )}
+
+          {/* Advance Buttons */}
+          {order.status === "pending" && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => setStatus("preparing")}
+              disabled={updateStatus.isPending}
+            >
+              Confirmar pedido
+            </Button>
+          )}
+
+          {(order.status === "pending" || order.status === "preparing" || order.status === "confirmed") && order.delivery_type !== "pickup" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setStatus("out_for_delivery")}
+              disabled={updateStatus.isPending}
+            >
+              Saiu para entrega
+            </Button>
+          )}
+
+          {(order.status === "pending" || order.status === "preparing" || order.status === "confirmed" || order.status === "out_for_delivery") && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => setStatus("delivered")}
+              disabled={updateStatus.isPending}
+            >
+              Entregue
+            </Button>
+          )}
+
+          {(order.status === "pending" || order.status === "preparing" || order.status === "confirmed" || order.status === "out_for_delivery") && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setStatus("cancelled")}
+              disabled={updateStatus.isPending}
+            >
+              Cancelar pedido
+            </Button>
+          )}
         </div>
       </section>
 
@@ -111,13 +256,16 @@ export default function AdminOrderDetail() {
         <section className="rounded-xl border border-border bg-card p-5 space-y-3 lg:col-span-1">
           <h2 className="font-medium">Cliente</h2>
           <div>
-            <div className="font-medium">{customer?.name ?? "—"}</div>
-            {customer?.email && <div className="text-sm text-muted-foreground">{customer.email}</div>}
+            <div className="font-medium">{order.customer_name ?? "—"}</div>
           </div>
-          {customer?.phone && (
+          {order.customer_phone && (
             <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" />{customer.phone}</span>
-              <Button size="icon" variant="ghost" onClick={() => copy(customer.phone!, "Telefone")}>
+              <span className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" />{order.customer_phone}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => copyToClipboard(order.customer_phone ?? "", "Telefone")}
+              >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
@@ -142,8 +290,12 @@ export default function AdminOrderDetail() {
               )}
             </h2>
             {order.delivery_type === "delivery" && (
-              <Button size="sm" variant="ghost" onClick={() => copy(address, "Endereço")}>
-                <Copy className="h-4 w-4" /> Copiar
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => copyToClipboard(address, "Endereço")}
+              >
+                <Copy className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -179,12 +331,11 @@ export default function AdminOrderDetail() {
           <h2 className="font-medium">Itens do pedido</h2>
         </header>
         <div className="divide-y divide-border">
-          {items.map((it) => {
-            const product = products.find((p) => p.id === it.product_id);
+          {items.map((it: any) => {
             return (
               <div key={it.id} className="p-4 flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="font-medium truncate">{product?.name ?? "Produto"}</div>
+                  <div className="font-medium truncate">{it.product_name ?? "Produto"}</div>
                   <div className="text-xs text-muted-foreground">
                     {it.quantity} × {formatBRL(it.unit_price_cents)}
                   </div>

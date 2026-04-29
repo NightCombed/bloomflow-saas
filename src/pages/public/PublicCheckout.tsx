@@ -10,8 +10,10 @@ import { toast } from "sonner";
 
 import { useTenant } from "@/contexts/TenantContext";
 import { useCart } from "@/contexts/CartContext";
-import { useMockData } from "@/hooks/useMockData";
-import { byStore, createOrder, formatBRL } from "@/lib/mockData";
+import { formatBRL } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { ShippingRule } from "@/types/database";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +76,6 @@ export default function PublicCheckout() {
   const { store, settings } = useTenant();
   const { items, subtotalCents, notes, setNotes, clear } = useCart();
   const navigate = useNavigate();
-  const snapshot = useMockData();
   const [submitting, setSubmitting] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -99,11 +100,26 @@ export default function PublicCheckout() {
   const immediate = watched.immediate;
 
   // Active shipping rules for this store
-  const rules = useMemo(() => {
-    if (!store) return [];
-    return byStore.shippingRules(store.id).filter((r) => r.active);
-    // re-compute when mock store changes
-  }, [store, snapshot.version]);
+  const { data: rules = [] } = useQuery<ShippingRule[]>({
+    queryKey: ["shipping-regions", store?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shipping_regions")
+        .select("*")
+        .eq("store_id", store!.id)
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        store_id: row.store_id,
+        name: row.name,
+        price_cents: row.fee_cents,
+        active: row.is_active,
+      }));
+    },
+    enabled: !!store?.id,
+  });
 
   // Match neighborhood -> rule
   const matchedRule = useMemo(() => {
@@ -169,14 +185,13 @@ export default function PublicCheckout() {
     }
     lines.push("", `*Subtotal:* ${formatBRL(subtotalCents)}`);
     lines.push(
-      `*Frete:* ${
-        v.delivery_type === "pickup"
-          ? "Retirada na loja"
-          : matchedRule
-            ? `${matchedRule.name} — ${formatBRL(shippingFeeCents)}`
-            : shippingFeeCents === 0
-              ? "Grátis"
-              : formatBRL(shippingFeeCents)
+      `*Frete:* ${v.delivery_type === "pickup"
+        ? "Retirada na loja"
+        : matchedRule
+          ? `${matchedRule.name} — ${formatBRL(shippingFeeCents)}`
+          : shippingFeeCents === 0
+            ? "Grátis"
+            : formatBRL(shippingFeeCents)
       }`
     );
     lines.push(`*Total:* ${formatBRL(totalCents)}`, "");
@@ -196,7 +211,7 @@ export default function PublicCheckout() {
     return lines.join("\n");
   };
 
-  const onSubmit = (values: CheckoutValues) => {
+  const onSubmit = async (values: CheckoutValues) => {
     if (values.delivery_type === "delivery" && shippingPending) {
       toast.error("Região não atendida", {
         description: "Selecione um bairro da lista ou entre em contato pelo WhatsApp.",
@@ -205,33 +220,45 @@ export default function PublicCheckout() {
     }
     setSubmitting(true);
     try {
-      const order = createOrder(store.id, {
-        customer: { name: values.name, phone: values.phone },
-        delivery_type: values.delivery_type,
-        address:
-          values.delivery_type === "delivery"
-            ? {
-                street: values.street,
-                number: values.number,
-                neighborhood: values.neighborhood,
-                complement: values.complement,
-              }
-            : undefined,
-        shipping_region_id: matchedRule?.id ?? null,
-        shipping_region_name: matchedRule?.name ?? null,
-        shipping_fee_cents: shippingFeeCents,
-        scheduled_for:
-          !values.immediate && values.deliveryDate ? values.deliveryDate.toISOString() : null,
-        notes: values.notes,
-        items: items.map((i) => ({
+      const deliveryDate =
+        !values.immediate && values.deliveryDate
+          ? values.deliveryDate.toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+
+      const payload = {
+        p_store_slug: store.slug,
+        p_customer_name: values.name,
+        p_customer_phone: values.phone,
+        p_delivery_type: values.delivery_type,
+        p_delivery_date: deliveryDate,
+        p_notes: values.notes || null,
+        p_region_slug: values.delivery_type === "delivery" ? (matchedRule?.name
+          ? matchedRule.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "")
+          : null)
+          : null,
+        p_address_street: values.delivery_type === "delivery" ? (values.street ?? null) : null,
+        p_address_number: values.delivery_type === "delivery" ? (values.number ?? null) : null,
+        p_address_neighborhood: values.delivery_type === "delivery" ? (values.neighborhood ?? null) : null,
+        p_address_complement: values.delivery_type === "delivery" ? (values.complement || null) : null,
+        p_items: items.map((i) => ({
           product_id: i.productId,
           quantity: i.quantity,
-          unit_price_cents: i.unit_price_cents,
         })),
-      });
+      };
+
+      const { data, error } = await supabase.rpc("create_public_order", payload);
+
+      if (error) {
+        toast.error("Erro ao criar pedido", { description: error.message });
+        return;
+      }
+
+      const result = data as { order_id: string; order_number: number };
       clear();
       toast.success("Pedido enviado!", { description: "Em breve a floricultura entrará em contato." });
-      navigate(`/loja/${store.slug}/pedido/${order.id}`);
+      navigate(`/loja/${store.slug}/pedido/${result.order_id}`);
+    } catch (err: any) {
+      toast.error("Erro inesperado", { description: err?.message ?? "Tente novamente." });
     } finally {
       setSubmitting(false);
     }

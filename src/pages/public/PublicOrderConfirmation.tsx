@@ -2,9 +2,11 @@ import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, Flower2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useQuery } from "@tanstack/react-query";
 
 import { useTenant } from "@/contexts/TenantContext";
-import { byStore, formatBRL, deliveries, products as allProducts } from "@/lib/mockData";
+import { formatBRL } from "@/lib/mockData";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { WhatsAppButton } from "@/components/store/WhatsAppButton";
@@ -13,9 +15,33 @@ import { EmptyState } from "@/components/store/EmptyState";
 export default function PublicOrderConfirmation() {
   const { store, settings } = useTenant();
   const { orderId } = useParams<{ orderId: string }>();
+
+  const { data: order, isLoading } = useQuery({
+    queryKey: ["public-order", orderId],
+    queryFn: async () => {
+      if (!orderId) return null;
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, order_items(*)")
+        .eq("id", orderId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orderId,
+  });
+
   if (!store) return null;
 
-  const order = orderId ? byStore.order(store.id, orderId) : null;
+  if (isLoading) {
+    return (
+      <div className="container py-16 grid place-items-center min-h-[50vh]">
+        <Flower2 className="h-10 w-10 text-primary animate-spin" />
+      </div>
+    );
+  }
+
   if (!order) {
     return (
       <div className="container py-16">
@@ -31,13 +57,11 @@ export default function PublicOrderConfirmation() {
     );
   }
 
-  const items = byStore.orderItems(store.id, order.id);
-  const customer = byStore.customer(store.id, order.customer_id);
-  const delivery = deliveries.find((d) => d.order_id === order.id) ?? null;
+  // Handle both possible casing depending on Supabase relations response
+  const items = order.order_items || [];
+  const orderNumber = order.order_number || order.id.slice(-6).toUpperCase();
 
-  const productName = (id: string) => allProducts.find((p) => p.id === id)?.name ?? "Produto";
-
-  const whatsAppMsg = `Olá! Gostaria de acompanhar meu pedido #${order.id.slice(-6).toUpperCase()}.`;
+  const whatsAppMsg = `Olá! Gostaria de acompanhar meu pedido #${orderNumber}.`;
 
   return (
     <div className="container py-10 md:py-16 max-w-3xl">
@@ -47,7 +71,7 @@ export default function PublicOrderConfirmation() {
         </div>
         <h1 className="font-serif text-3xl md:text-4xl">Pedido recebido!</h1>
         <p className="text-muted-foreground">
-          Pedido <span className="font-medium text-foreground">#{order.id.slice(-6).toUpperCase()}</span> — em
+          Pedido <span className="font-medium text-foreground">#{orderNumber}</span> — em
           breve a floricultura entrará em contato para confirmar.
         </p>
       </div>
@@ -56,13 +80,13 @@ export default function PublicOrderConfirmation() {
         <div>
           <h2 className="font-serif text-xl mb-3">Itens</h2>
           <div className="space-y-2">
-            {items.map((it) => (
+            {items.map((it: any) => (
               <div key={it.id} className="flex gap-3 text-sm">
-                <div className="h-10 w-10 rounded-md bg-gradient-soft grid place-items-center flex-shrink-0">
+                <div className="h-10 w-10 rounded-md bg-gradient-soft grid place-items-center flex-shrink-0 overflow-hidden">
                   <Flower2 className="h-4 w-4 text-primary/40" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium">{productName(it.product_id)}</p>
+                  <p className="font-medium">{it.product_name ?? "Produto"}</p>
                   <p className="text-muted-foreground">
                     {it.quantity}× {formatBRL(it.unit_price_cents)}
                   </p>
@@ -72,6 +96,19 @@ export default function PublicOrderConfirmation() {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>{formatBRL(order.subtotal_cents)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Frete ({order.shipping_region_name || (order.delivery_type === "pickup" ? "Retirada" : "Entrega")})</span>
+            <span>{order.shipping_fee_cents > 0 ? formatBRL(order.shipping_fee_cents) : "Grátis"}</span>
           </div>
         </div>
 
@@ -87,18 +124,24 @@ export default function PublicOrderConfirmation() {
         <div className="grid sm:grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground mb-1">Cliente</p>
-            <p className="font-medium">{customer?.name}</p>
-            {customer?.phone && <p className="text-muted-foreground">{customer.phone}</p>}
+            <p className="font-medium">{order.customer_name}</p>
+            {order.customer_phone && <p className="text-muted-foreground">{order.customer_phone}</p>}
           </div>
-          {delivery && (
+          {(order.delivery_type === "delivery" && order.delivery_address) && (
             <div>
               <p className="text-muted-foreground mb-1">Entrega</p>
-              <p className="font-medium">{delivery.address}</p>
-              {delivery.scheduled_for && (
+              <p className="font-medium">{order.delivery_address}</p>
+              {order.scheduled_for && (
                 <p className="text-muted-foreground">
-                  {format(new Date(delivery.scheduled_for), "PPP", { locale: ptBR })}
+                  {format(new Date(order.scheduled_for), "PPP", { locale: ptBR })}
                 </p>
               )}
+            </div>
+          )}
+          {order.delivery_type === "pickup" && (
+            <div>
+              <p className="text-muted-foreground mb-1">Retirada na loja</p>
+              <p className="font-medium">{settings?.address ?? "Endereço da loja"}</p>
             </div>
           )}
         </div>

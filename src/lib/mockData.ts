@@ -91,7 +91,7 @@ export const orders: Order[] = [
   { id: "o3", store_id: "st_1", customer_id: "cu1", status: "pending", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 14500, total_cents: 14500, created_at: iso(0, 11, 5) },
   { id: "o4", store_id: "st_1", customer_id: "cu2", status: "out_for_delivery", delivery_type: "delivery", shipping_region_id: "sr2", shipping_region_name: "Zona Sul SP", shipping_fee_cents: 2500, subtotal_cents: 22900, total_cents: 25400, created_at: iso(0, 8, 0) },
   { id: "o5", store_id: "st_1", customer_id: "cu1", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 16900, total_cents: 18400, created_at: iso(2, 16, 30) },
-  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "canceled", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 12900, total_cents: 12900, created_at: iso(3, 10, 0) },
+  { id: "o6", store_id: "st_1", customer_id: "cu2", status: "cancelled", delivery_type: "pickup", shipping_fee_cents: 0, subtotal_cents: 12900, total_cents: 12900, created_at: iso(3, 10, 0) },
   { id: "o7", store_id: "st_1", customer_id: "cu1", status: "delivered", delivery_type: "delivery", shipping_region_id: "sr1", shipping_region_name: "Centro SP", shipping_fee_cents: 1500, subtotal_cents: 37800, total_cents: 39300, created_at: iso(5, 13, 0) },
 ];
 
@@ -297,7 +297,7 @@ export const metrics = {
   todayRevenueCents(store_id: string) {
     const now = new Date();
     return byStore.orders(store_id)
-      .filter((o) => o.status !== "canceled" && sameDay(new Date(o.created_at), now))
+      .filter((o) => o.status !== "cancelled" && sameDay(new Date(o.created_at), now))
       .reduce((s, o) => s + o.total_cents, 0);
   },
   countByStatus(store_id: string, status: Order["status"]) {
@@ -328,15 +328,14 @@ export const metrics = {
 
 export const ORDER_STATUS_LABEL: Record<Order["status"], string> = {
   pending: "Pendente",
-  confirmed: "Confirmado",
   preparing: "Em preparação",
   out_for_delivery: "Saiu para entrega",
   delivered: "Entregue",
-  canceled: "Cancelado",
+  cancelled: "Cancelado",
 };
 
 export const ORDER_STATUS_FLOW: Order["status"][] = [
-  "pending", "confirmed", "preparing", "out_for_delivery", "delivered",
+  "pending", "preparing", "out_for_delivery", "delivered",
 ];
 
 /* ---------- Order creation (mock) ---------- */
